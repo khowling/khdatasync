@@ -2,10 +2,8 @@
 "use strict"
 
 var rest = require('restler');
-var pg = require('pg');
-var conString = process.env.PG_URL;
-
-var client = new pg.Client(conString);
+var pg = require('pg'),
+	  client = new pg.Client(process.env.PG_URL);
 
 let importData = function(pg, oauth, syncdef, nextRecordsUrl) {
 	return new Promise(function (resolve, reject)  {
@@ -70,11 +68,45 @@ let importData = function(pg, oauth, syncdef, nextRecordsUrl) {
 	}).catch ((e) => console.error ('catch ', e));
 }
 
-let syncDefs = [
+let SYNC_DEFS = [
 	{schema: 'salesforce', idsequence: 'item__c_id_seq',            table: 'item__c',            fields: [ 'IsDeleted', 'CreatedDate', 'Name', 'ItemNmb__c', 'Store__c', 'WGI__c', 'ItemFamily__c', 'SubItemGroup__c', 'Category__c']},
 	{schema: 'salesforce', idsequence: 'affinityprofile__c_id_seq', table: 'affinityprofile__c', fields: [ 'IsDeleted', 'CreatedDate', 'Name', 'Customer__c', 'CustomerCardID__c', 'Transfer__c']},
 	{schema: 'salesforce', idsequence: 'affinityrule__c_id_seq',    table: 'affinityrule__c',    fields: [ 'IsDeleted', 'CreatedDate', 'Name', 'Active__c', 'GeneratedCode__c']}
 ]
+
+let importAppData = function(client, oauthres, syncDefs) {
+	let p = null;
+	for (let sdefs of syncDefs) {
+		if (!p)
+			p = importData(client, oauthres, sdefs);
+		else {
+			p = p.then(() => importData(client, oauthres, sdefs));
+		}
+	}
+	return p;
+}
+
+let refreshAffProfileMap = function(pg) {
+	return new Promise(function (resolve, reject)  {
+		pg.query('DELETE FROM affinityprofilemapping', function(err, result) {
+			if(err) {
+				console.error('error running query', err);
+				reject (err);
+			} else {
+				pg.query('INSERT INTO affinityprofilemapping SELECT customercardid__c customercardid, id refid FROM salesforce.affinityprofile__c', function(err, result) {
+					if(err) {
+						console.error('error running query', err);
+						reject (err);
+					} else {
+						resolve(result);
+					}
+				});
+			}
+		});
+	});
+}
+
+
 console.log ('Connecting......');
 client.connect(function(err) {
   if(err) {
@@ -91,16 +123,8 @@ client.connect(function(err) {
 
 //			console.log ("result : " + JSON.stringify(result));
 			if (oauthres.access_token && oauthres.instance_url) {
-				let p = null;
-				for (let sdefs of syncDefs) {
-					if (!p)
-						p = importData(client, oauthres, sdefs);
-					else {
-						p = p.then(() => importData(client, oauthres, sdefs));
-					}
-				}
-
-				p.then (
+/*
+				importAppData (client, oauthres, SYNC_DEFS).then (
 					(res) => {
 						console.log ('\nDone : ' + + JSON.stringify(res));
 						client.end();
@@ -109,6 +133,17 @@ client.connect(function(err) {
 						client.end();
 					}
 				);
+*/
+				refreshAffProfileMap (client).then (
+					(res) => {
+						console.log ('\nDone : ' + + JSON.stringify(res));
+						client.end();
+					}, (err) => {
+						console.log ('\nErr : ' + JSON.stringify(err));
+						client.end();
+					}
+				);
+
 			}
 		});
 	}
