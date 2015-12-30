@@ -1,0 +1,264 @@
+{
+    "Transaction": {
+        "CompanyID": "DirkTest",
+        "StoreID": "0420",
+        "EndDateTime": "2015-11-19T13:23:57",
+        "TotalAmount": 28506.20,
+        "Sale": [{
+            "CodeInput": "0003843789012",
+            "ItemID": "0003843",
+            "Quantity": 37,
+            "ExtendedAmount": 2932.40,
+            "OriginalAmount": 3449.88,
+            "ScanInput": "0003843789012",
+            "CurrentUnitPrice": 93.24,
+            "ItemDescription": "COLA CAO 1.2 KGS+10% GRATIS",
+            "AttributeValue": "EUR",
+            "Discount": {
+                "Amount": 517.48,
+                "DiscountableAmount": 3449.88,
+                "DiscountName": "Weißwurstrabatt",
+                "PromotionID": "08154711"
+            }
+        }, {
+            "CodeInput": "0009683789012",
+            "ItemID": "0009683",
+            "Quantity": 38,
+            "ExtendedAmount": 2375.66,
+            "OriginalAmount": 2794.90,
+            "ScanInput": "0009683789012",
+            "CurrentUnitPrice": 73.55,
+            "ItemDescription": "HAMBURGUESA DE VACUNO DE VERDURAS",
+            "AttributeValue": "EUR",
+            "Discount": {
+                "Amount": 419.23,
+                "DiscountableAmount": 2794.90,
+                "DiscountName": "Weißwurstrabatt",
+                "PromotionID": "08154711"
+            }
+        }, {
+            "CodeInput": "0027462789012",
+            "ItemID": "0027462",
+            "Quantity": 39,
+            "ExtendedAmount": 2349.34,
+            "OriginalAmount": 2763.93,
+            "ScanInput": "0027462789012",
+            "CurrentUnitPrice": 70.87,
+            "ItemDescription": "GEL DUCHA ALOE VERA",
+            "AttributeValue": "EUR",
+            "Discount": {
+                "Amount": 414.59,
+                "DiscountableAmount": 2763.93,
+                "DiscountName": "Weißwurstrabatt",
+                "PromotionID": "08154711"
+            }
+        }, {
+            "CodeInput": "0095617789012",
+            "ItemID": "0095617",
+            "Quantity": 40,
+            "ExtendedAmount": 207.40,
+            "OriginalAmount": 244.00,
+            "ScanInput": "0095617789012",
+            "CurrentUnitPrice": 6.10,
+            "ItemDescription": "Embutido loncheado",
+            "AttributeValue": "EUR",
+            "Discount": {
+                "Amount": 36.60,
+                "DiscountableAmount": 244.00,
+                "DiscountName": "Weißwurstrabatt",
+                "PromotionID": "08154711"
+            }
+        }, {
+            "CodeInput": "0003512789012",
+            "ItemID": "0003512",
+            "Quantity": 30,
+            "ExtendedAmount": 2293.22,
+            "OriginalAmount": 2697.90,
+            "ScanInput": "0003512789012",
+            "CurrentUnitPrice": 89.93,
+            "ItemDescription": "Mahou Sin cerveza sin alcohol",
+            "AttributeValue": "EUR",
+            "Discount": {
+                "Amount": 404.69,
+                "DiscountableAmount": 2697.90,
+                "DiscountName": "Weißwurstrabatt",
+                "PromotionID": "08154711"
+            }
+        }, {
+            "CodeInput": "0002979789012",
+            "ItemID": "0002979",
+            "Quantity": 35,
+            "ExtendedAmount": 1832.00,
+            "OriginalAmount": 2155.30,
+            "ScanInput": "0002979789012",
+            "CurrentUnitPrice": 61.58,
+            "ItemDescription": "AQUARIUS BEBIDA ISOTONICA NATURAL",
+            "AttributeValue": "EUR",
+            "Discount": {
+                "Amount": 323.30,
+                "DiscountableAmount": 2155.30,
+                "DiscountName": "Weißwurstrabatt",
+                "PromotionID": "08154711"
+            }
+        }, {
+            "CodeInput": "0002484789012",
+            "ItemID": "0002484",
+            "Quantity": 30,
+            "ExtendedAmount": 1353.03,
+            "OriginalAmount": 1591.80,
+            "ScanInput": "0002484789012",
+            "CurrentUnitPrice": 53.06,
+            "ItemDescription": "VALENCIA D.O. CRIANZA",
+            "AttributeValue": "EUR",
+            "Discount": {
+                "Amount": 238.77,
+                "DiscountableAmount": 1591.80,
+                "DiscountName": "Weißwurstrabatt",
+                "PromotionID": "08154711"
+            }
+        }, {
+            "CodeInput": "0006045789012",
+            "ItemID": "0006045",
+            "Quantity": 35,
+            "ExtendedAmount": 2168.18,
+            "OriginalAmount": 2550.80,
+            "ScanInput": "0006045789012",
+            "CurrentUnitPrice": 72.88,
+            "ItemDescription": "DETERGENTE 60 LAVADOS",
+            "AttributeValue": "EUR",
+            "Discount": {
+                "Amount": 382.62,
+                "DiscountableAmount": 2550.80,
+                "DiscountName": "Weißwurstrabatt",
+                "PromotionID": "08154711"
+            }
+        }, {
+            "CodeInput": "0001224789012",
+            "ItemID": "0001224",
+            "Quantity": 39,
+            "ExtendedAmount": 3233.12,
+            "OriginalAmount": 3803.67,
+            "ScanInput": "0001224789012",
+            "CurrentUnitPrice": 97.53,
+            "ItemDescription": "PROBIOTICO CON FRUTA",
+            "AttributeValue": "EUR",
+            "Discount": {
+                "Amount": 570.55,
+                "DiscountableAmount": 3803.67,
+                "DiscountName": "Weißwurstrabatt",
+                "PromotionID": "08154711"
+            }
+        }, {
+            "CodeInput": "0006354789012",
+            "ItemID": "0006354",
+            "Quantity": 36,
+            "ExtendedAmount": 2771.75,
+            "OriginalAmount": 3260.88,
+            "ScanInput": "0006354789012",
+            "CurrentUnitPrice": 90.58,
+            "ItemDescription": "ACEITE DE OLIVA SUAVE",
+            "AttributeValue": "EUR",
+            "Discount": {
+                "Amount": 489.13,
+                "DiscountableAmount": 3260.88,
+                "DiscountName": "Weißwurstrabatt",
+                "PromotionID": "08154711"
+            }
+        }, {
+            "CodeInput": "0009021789012",
+            "ItemID": "0009021",
+            "Quantity": 32,
+            "ExtendedAmount": 1184.02,
+            "OriginalAmount": 1392.96,
+            "ScanInput": "0009021789012",
+            "CurrentUnitPrice": 43.53,
+            "ItemDescription": "Castillo de Albai Vino tinto crianz",
+            "AttributeValue": "EUR",
+            "Discount": {
+                "Amount": 208.94,
+                "DiscountableAmount": 1392.96,
+                "DiscountName": "Weißwurstrabatt",
+                "PromotionID": "08154711"
+            }
+        }, {
+            "CodeInput": "0008555789012",
+            "ItemID": "0008555",
+            "Quantity": 32,
+            "ExtendedAmount": 1997.30,
+            "OriginalAmount": 2349.76,
+            "ScanInput": "0008555789012",
+            "CurrentUnitPrice": 73.43,
+            "ItemDescription": "Protector natural antimosquito roll",
+            "AttributeValue": "EUR",
+            "Discount": {
+                "Amount": 352.46,
+                "DiscountableAmount": 2349.76,
+                "DiscountName": "Weißwurstrabatt",
+                "PromotionID": "08154711"
+            }
+        }, {
+            "CodeInput": "0008710789012",
+            "ItemID": "0008710",
+            "Quantity": 35,
+            "ExtendedAmount": 696.45,
+            "OriginalAmount": 819.35,
+            "ScanInput": "0008710789012",
+            "CurrentUnitPrice": 23.41,
+            "ItemDescription": "SALSAS AMERICANAS SURT.",
+            "AttributeValue": "EUR",
+            "Discount": {
+                "Amount": 122.90,
+                "DiscountableAmount": 819.35,
+                "DiscountName": "Weißwurstrabatt",
+                "PromotionID": "08154711"
+            }
+        }, {
+            "CodeInput": "0098674789012",
+            "ItemID": "0098674",
+            "Quantity": 34,
+            "ExtendedAmount": 2617.18,
+            "OriginalAmount": 3079.04,
+            "ScanInput": "0098674789012",
+            "CurrentUnitPrice": 90.56,
+            "ItemDescription": "Lavavajillas ultraconcentrado Edici",
+            "AttributeValue": "EUR",
+            "Discount": {
+                "Amount": 461.86,
+                "DiscountableAmount": 3079.04,
+                "DiscountName": "Weißwurstrabatt",
+                "PromotionID": "08154711"
+            }
+        }, {
+            "CodeInput": "0008458789012",
+            "ItemID": "0008458",
+            "Quantity": 38,
+            "ExtendedAmount": 495.16,
+            "OriginalAmount": 582.54,
+            "ScanInput": "0008458789012",
+            "CurrentUnitPrice": 15.33,
+            "ItemDescription": "Nike Pack original EdT+desodorante",
+            "AttributeValue": "EUR",
+            "Discount": {
+                "Amount": 87.38,
+                "DiscountableAmount": 582.54,
+                "DiscountName": "Weißwurstrabatt",
+                "PromotionID": "08154711"
+            }
+        }],
+        "Tender": [{
+            "TenderDescription": "Bar",
+            "Amount": 28516.20
+        }],
+        "Customer": {
+            "CustomerID": "4004555552797",
+            "AuthorizationMiscSettlementData": "GIROCARD"
+        },
+        "Discount": [{
+            "Amount": 5030.51,
+            "DiscountableAmount": 33536.71,
+            "DiscountName": "Weißwurstrabatt",
+            "PromotionID": "08154711"
+        }]
+    }
+}
+
