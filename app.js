@@ -52,7 +52,7 @@ let importData = function(pg, oauth, syncdef, nextRecordsUrl) {
 								if (syncdef.checkModify) for (let f of syncdef.fields) {
 									if (!(f === "CreatedDate" || f === "SystemModstamp" ))
 										if (r[f] !== erec[f.toLowerCase()]) {
-											console.log (`diff ${f}: ${r[f]} ${erec[f.toLowerCase()]}`);
+											console.log (`diff ${f}: ${r[f]} :: ${erec[f.toLowerCase()]}`);
 											changeRecs.push (r); break;
 										}
 
