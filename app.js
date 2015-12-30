@@ -3,8 +3,14 @@
 
 var rest = require('restler');
 var pg = require('pg'),
-	  client = new pg.Client(process.env.PG_URL);
+	  client = new pg.Client(process.env.PG_URL),
+		IMPORT_DEFS = [
+			{schema: 'salesforce', idsequence: 'item__c_id_seq',            table: 'item__c',            fields: [ 'IsDeleted', 'CreatedDate', 'Name', 'ItemNmb__c', 'Store__c', 'WGI__c', 'ItemFamily__c', 'SubItemGroup__c', 'Category__c']},
+			{schema: 'salesforce', idsequence: 'affinityprofile__c_id_seq', table: 'affinityprofile__c', fields: [ 'IsDeleted', 'CreatedDate', 'Name', 'Customer__c', 'CustomerCardID__c', 'Transfer__c']},
+			{schema: 'salesforce', idsequence: 'affinityrule__c_id_seq',    table: 'affinityrule__c',    fields: [ 'IsDeleted', 'CreatedDate', 'Name', 'Active__c', 'GeneratedCode__c']}
+		];
 
+// ------------------------------------------------------------- Salesforce -> Postgres
 let importData = function(pg, oauth, syncdef, nextRecordsUrl) {
 	return new Promise(function (resolve, reject)  {
 		if (!nextRecordsUrl)
@@ -68,44 +74,100 @@ let importData = function(pg, oauth, syncdef, nextRecordsUrl) {
 	}).catch ((e) => console.error ('catch ', e));
 }
 
-let SYNC_DEFS = [
-	{schema: 'salesforce', idsequence: 'item__c_id_seq',            table: 'item__c',            fields: [ 'IsDeleted', 'CreatedDate', 'Name', 'ItemNmb__c', 'Store__c', 'WGI__c', 'ItemFamily__c', 'SubItemGroup__c', 'Category__c']},
-	{schema: 'salesforce', idsequence: 'affinityprofile__c_id_seq', table: 'affinityprofile__c', fields: [ 'IsDeleted', 'CreatedDate', 'Name', 'Customer__c', 'CustomerCardID__c', 'Transfer__c']},
-	{schema: 'salesforce', idsequence: 'affinityrule__c_id_seq',    table: 'affinityrule__c',    fields: [ 'IsDeleted', 'CreatedDate', 'Name', 'Active__c', 'GeneratedCode__c']}
-]
 
-let importAppData = function(client, oauthres, syncDefs) {
+let importAppData = function(client, oauth, syncDefs) {
 	let p = null;
 	for (let sdefs of syncDefs) {
 		if (!p)
-			p = importData(client, oauthres, sdefs);
+			p = importData(client, oauth, sdefs);
 		else {
-			p = p.then(() => importData(client, oauthres, sdefs));
+			p = p.then(() => importData(client, oauth, sdefs));
 		}
 	}
 	return p;
 }
 
+// ------------------------------------------------------------- Postgres -> Postgres (affinityprofile__c -> affinityprofilemapping)
 let refreshAffProfileMap = function(pg) {
 	return new Promise(function (resolve, reject)  {
 		pg.query('DELETE FROM affinityprofilemapping', function(err, result) {
-			if(err) {
-				console.error('error running query', err);
+			if(err)
 				reject (err);
-			} else {
+			else
 				pg.query('INSERT INTO affinityprofilemapping SELECT customercardid__c customercardid, id refid FROM salesforce.affinityprofile__c', function(err, result) {
-					if(err) {
-						console.error('error running query', err);
+					if(err)
 						reject (err);
-					} else {
+					else
 						resolve(result);
-					}
 				});
-			}
 		});
-	});
+	}).catch ((e) => console.error ('catch ', e));
 }
 
+// ------------------------------------------------------------- Postgres -> Salesforce
+let exportAffinityMap = function(pg, oauth) {
+	return new Promise(function (resolve, reject)  {
+		rest.post (oauth.instance_url + '/services/async/35.0/job', {
+			headers: {
+				'X-SFDC-Session': oauth.access_token,
+				'Content-Type': 'application/xml'
+			},
+			data: '<?xml version="1.0" encoding="UTF-8"?>' +
+						'<jobInfo xmlns="http://www.force.com/2009/06/asyncapi/dataload">' +
+						'    <operation>update</operation>' +
+						'    <object>AffinityProfile__c</object>' +
+						'    <contentType>CSV</contentType>' +
+						'</jobInfo>'
+		}).on('complete', (jobresponse) => {
+			console.log ('job  ' + JSON.stringify(jobresponse));
+				let jobid = jobresponse.jobInfo.id[0];
+				pg.query("SELECT sfid, transfer__c from salesforce.affinityprofile__c  where customercardid__c like '40045555_____'", function(err, result) {
+					if(err)
+						reject (err);
+					else if (result.rows) {
+						let payload = "Id,Transfer__c\n";
+						for (let r of result.rows) {
+							payload += `${r.sfid},"${r.transfer__c.replace(/"/g, '\""')}"\n`;
+						}
+						console.log ('jobid ' + jobid +  ', payload ' + payload);
+						rest.post (oauth.instance_url + '/services/async/35.0/job/'+jobid+'/batch', {
+							headers: {
+								'X-SFDC-Session': oauth.access_token,
+								'Content-Type': 'text/csv'
+							},
+							data : payload
+						}).on('complete', (val) => {
+							rest.post (oauth.instance_url + '/services/async/35.0/job/'+jobid, {
+								headers: {
+									'X-SFDC-Session': oauth.access_token,
+									'Content-Type': 'application/xml'
+								},
+								data : '<?xml version="1.0" encoding="UTF-8"?>' +
+												'<jobInfo xmlns="http://www.force.com/2009/06/asyncapi/dataload">' +
+												  '<state>Closed</state>' +
+												'</jobInfo>'
+							}).on('complete', (val) => {
+								resolve (val);
+							});
+						}).on('error', (err) => {
+							console.error('error', err);
+							reject('err : ' + err);
+						}).on ('fail', (err) => {
+							console.error('fail', err);
+							reject('fail : ' + err);
+						});
+					} else
+						reject (result);
+				});
+		}).on('error', (err) => {
+			console.error('error', err);
+			reject('err : ' + err);
+		}).on ('fail', (err) => {
+			console.error('fail', err);
+			reject('fail : ' + err);
+		});
+	}).catch ((e) => console.error ('catch ', e));
+}
 
 console.log ('Connecting......');
 client.connect(function(err) {
@@ -123,27 +185,39 @@ client.connect(function(err) {
 
 //			console.log ("result : " + JSON.stringify(result));
 			if (oauthres.access_token && oauthres.instance_url) {
-/*
-				importAppData (client, oauthres, SYNC_DEFS).then (
-					(res) => {
-						console.log ('\nDone : ' + + JSON.stringify(res));
-						client.end();
-					}, (err) => {
-						console.log ('\nErr : ' + JSON.stringify(err));
-						client.end();
-					}
-				);
-*/
-				refreshAffProfileMap (client).then (
-					(res) => {
-						console.log ('\nDone : ' + + JSON.stringify(res));
-						client.end();
-					}, (err) => {
-						console.log ('\nErr : ' + JSON.stringify(err));
-						client.end();
-					}
-				);
-
+				if (false) {
+					importAppData (client, oauthres, IMPORT_DEFS).then (
+						(res) => {
+							console.log ('\nDone : ' + JSON.stringify(res));
+							client.end();
+						}, (err) => {
+							console.log ('\nErr : ' + JSON.stringify(err));
+							client.end();
+						}
+					);
+				}
+				if (false) {
+					refreshAffProfileMap (client).then (
+						(res) => {
+							console.log ('\nDone : ' + JSON.stringify(res));
+							client.end();
+						}, (err) => {
+							console.log ('\nErr : ' + JSON.stringify(err));
+							client.end();
+						}
+					);
+				}
+				if (true) {
+					exportAffinityMap (client, oauthres).then (
+						(res) => {
+							console.log ('\nDone : ' + JSON.stringify(res));
+							client.end();
+						}, (err) => {
+							console.log ('\nErr : ' + JSON.stringify(err));
+							client.end();
+						}
+					);
+				}
 			}
 		});
 	}
