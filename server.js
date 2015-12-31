@@ -25,12 +25,13 @@ var model = {
     }
 };
 
-console.log ('Connecting to :' + process.env.PG_URL);
+console.log ('Connecting to : ' + process.env.PG_URL);
 client.connect(function(err) {
   if(err) {
     return console.error('could not connect to postgres', err);
   } else {
-    var odataServer = ODataServer(process.env.HEROKU_URL)
+		console.log ('Starting odata server on : ' + process.env.ODATA_HOSTNAME);
+    var odataServer = ODataServer(process.env.ODATA_HOSTNAME)
       .model(model)
       .query((setName, query, cb) => {
 
