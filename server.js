@@ -25,6 +25,8 @@ var model = {
 };
 
 console.log ('Connecting to : ' + process.env.PG_URL);
+pg.defaults.poolSize = 5;
+pg.defaults.poolIdleTimeout = 5000; // 5 seconds (try to overcome the azure loadbalancer)
 pg.connect(process.env.PG_URL, function(err, client, done) {
   if(err) {
     return console.error('could not connect to postgres', err);
