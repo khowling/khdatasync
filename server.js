@@ -48,8 +48,8 @@ var odataServer = ODataServer(process.env.ODATA_HOSTNAME)
 					if (fkys.length >0) {
 						if (fkys[0] === "$or" || fkys[0] === "$and") {
 							let ors = [], orvals = query['$filter'][fkys[0]];
-							for (let f in orvals) {
-								ors.push(` ${f} = '${orvals[f]}' `);
+							for (let f of orvals) {
+								ors.push(` ${Object.keys(f)[0]} = '${f[Object.keys(f)[0]]}' `);
 							}
 							qstr+= ` WHERE ${ors.join(fkys[0].substring(1))}`;
 						} else
