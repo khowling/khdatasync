@@ -5,7 +5,12 @@
     "start": "node app"
   },
   "dependencies": {
+    "simple-odata-server": "*",
     "restler": "*",
-    "pg": "*"
+    "pg": "*",
+    "simple-odata-server": "*"
+  },
+  "engines": {
+    "node":"5.0.0"
   }
 }
