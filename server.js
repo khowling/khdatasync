@@ -2,8 +2,7 @@
 
 var http = require('http');
 var ODataServer = require("simple-odata-server");
-var pg = require('pg'),
-	  client = new pg.Client(process.env.PG_URL);
+var pg = require('pg');
 
 var model = {
     namespace: "jsreport",
@@ -26,7 +25,7 @@ var model = {
 };
 
 console.log ('Connecting to : ' + process.env.PG_URL);
-client.connect(function(err) {
+client.connect(process.env.PG_URL, function(err, client, done) {
   if(err) {
     return console.error('could not connect to postgres', err);
   } else {
@@ -37,10 +36,12 @@ client.connect(function(err) {
 
 				console.log ("query with " + JSON.stringify(query));
 				client.query("SELECT id, customercardid, companyid, storeid, totalamount, enddatetime from public.slip", function(err, result) {
+					done();
 					if (err) {
 						console.log ("query err " + JSON.stringify(err));
 						cb(err);
 					} else {
+
 						console.log ("query succ " + JSON.stringify(result.rows));
 						cb(null, {
 								count: result.rows.length,
