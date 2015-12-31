@@ -44,8 +44,9 @@ var odataServer = ODataServer(process.env.ODATA_HOSTNAME)
 		  } else {
 				let qstr = `SELECT ${Object.keys(query['$select']).join(',')} FROM  ${query['collection']}`;
 				if (query['$filter']) {
-					let first_field = Object.keys(query['$filter'])[0];
-					qstr+= ` WHERE ${first_field} = '${query['$filter'][first_field]}'`;
+					let fkys = Object.keys(query['$filter']);
+					if (fkys.length >0)
+						qstr+= ` WHERE ${fkys[0]} = '${query['$filter'][fkys[0]]}'`;
 				}
 				if (query['$limit']) {
 					qstr+= " limit " + query['$limit'];
