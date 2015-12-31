@@ -1,7 +1,13 @@
 
 
-webjob
+###Make the Webjob
+cp -r node_modules App_Data/jobs/triggered/sync
+cp sync.js App_Data/jobs/triggered/sync/app.js
+
+
+###webjob status
 https://azureconnect.scm.azurewebsites.net/api/triggeredwebjobs/sync
+
 
 set variables
 export PG_URL=postgres://<user>:<password>@<host>/<db>
