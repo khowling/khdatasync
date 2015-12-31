@@ -45,8 +45,16 @@ var odataServer = ODataServer(process.env.ODATA_HOSTNAME)
 				let qstr = `SELECT ${Object.keys(query['$select']).join(',')} FROM  ${query['collection']}`;
 				if (query['$filter']) {
 					let fkys = Object.keys(query['$filter']);
-					if (fkys.length >0)
-						qstr+= ` WHERE ${fkys[0]} = '${query['$filter'][fkys[0]]}'`;
+					if (fkys.length >0) {
+						if (fkys[0] === "$or" || fkys[0] === "$and") {
+							let ors = [], orvals = query['$filter'][fkys[0]];
+							for (let f in orvals) {
+								ors.push(` ${f} = '${orvals[f]}' `);
+							}
+							qstr+= ` WHERE ${ors.join(fkys[0].substring(1))}`;
+						} else
+							qstr+= ` WHERE ${fkys[0]} = '${query['$filter'][fkys[0]]}'`;
+					}
 				}
 				if (query['$limit']) {
 					qstr+= " limit " + query['$limit'];
