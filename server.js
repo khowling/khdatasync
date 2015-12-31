@@ -36,7 +36,7 @@ client.connect(function(err) {
       .query((setName, query, cb) => {
 
 				console.log ("query with " + JSON.stringify(query));
-				client.query("SELECT id, customercardid, companyid, storeid, totalamount, enddatetime__c from public.slip", function(err, result) {
+				client.query("SELECT id, customercardid, companyid, storeid, totalamount, enddatetime from public.slip", function(err, result) {
 					if (err) {
 						console.log ("query err " + JSON.stringify(err));
 						cb(err);
