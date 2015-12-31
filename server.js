@@ -13,7 +13,7 @@ var model = {
             "companyid": {"type": "Edm.String"},
             "storeid": {"type": "Edm.String"},
             "totalamount": {"type": "Edm.Double"},
-            "enddatetime__c": {"type": "Edm.DateTimeOffset"}  //yyyy-MM-ddTHH:mm:ss.fffZ or yyyy-MM-ddTHH:mm:ss.fff[+&#124;-]HH:mm 2015-04-15T10:30:09.7550000Z
+            "enddatetime": {"type": "Edm.DateTimeOffset"}  //yyyy-MM-ddTHH:mm:ss.fffZ or yyyy-MM-ddTHH:mm:ss.fff[+&#124;-]HH:mm 2015-04-15T10:30:09.7550000Z
 				}
     },
     entitySets: {
