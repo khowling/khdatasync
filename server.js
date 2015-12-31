@@ -24,26 +24,32 @@ var model = {
     }
 };
 
-console.log ('Connecting to : ' + process.env.PG_URL);
-pg.defaults.poolSize = 5;
-pg.defaults.poolIdleTimeout = 5000; // 5 seconds (try to overcome the azure loadbalancer)
-pg.connect(process.env.PG_URL, function(err, client, done) {
-  if(err) {
-    return console.error('could not connect to postgres', err);
-  } else {
-		console.log ('Starting odata server on : ' + process.env.ODATA_HOSTNAME);
-    var odataServer = ODataServer(process.env.ODATA_HOSTNAME)
-      .model(model)
-      .query((setName, query, cb) => {
 
+//pg.defaults.poolSize = 5;
+//pg.defaults.poolIdleTimeout = 3000; // 5 seconds (try to overcome the azure loadbalancer)
+//pg.connect(process.env.PG_URL, function(err, client, done) {
+//  if(err) {
+//    return console.error('could not connect to postgres', err);
+//  } else {
+console.log ('Starting odata server on : ' + process.env.ODATA_HOSTNAME);
+var odataServer = ODataServer(process.env.ODATA_HOSTNAME)
+  .model(model)
+  .query((setName, query, cb) => {
+
+		console.log ('Connecting to (need to do it here because Azure cannot keep open a connection) : ' + process.env.PG_URL);
+		var client = new pg.Client(process.env.PG_URL);
+		client.connect(function(err) {
+		  if(err) {
+		    console.error('could not connect to postgres', err);
+				cb(err);
+		  } else {
 				console.log ("query with " + JSON.stringify(query));
 				client.query("SELECT id, customercardid, companyid, storeid, totalamount, enddatetime from public.slip", function(err, result) {
-					done();
+					client.end();
 					if (err) {
 						console.log ("query err " + JSON.stringify(err));
 						cb(err);
 					} else {
-
 						console.log ("query succ " + JSON.stringify(result.rows));
 						cb(null, {
 								count: result.rows.length,
@@ -51,7 +57,9 @@ pg.connect(process.env.PG_URL, function(err, client, done) {
 						});
 					}
 				});
-      });
-    http.createServer(odataServer.handle.bind(odataServer)).listen(process.env.PORT ||1337);
-	}
-});
+			}
+		});
+  });
+http.createServer(odataServer.handle.bind(odataServer)).listen(process.env.PORT ||1337);
+//	}
+//});
