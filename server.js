@@ -25,7 +25,7 @@ var model = {
 };
 
 console.log ('Connecting to : ' + process.env.PG_URL);
-client.connect(process.env.PG_URL, function(err, client, done) {
+pg.connect(process.env.PG_URL, function(err, client, done) {
   if(err) {
     return console.error('could not connect to postgres', err);
   } else {
