@@ -17,7 +17,7 @@ var model = {
         }
     },
     entitySets: {
-        "public.slip": {
+        "slip": {
           entityType: "jsreport.SlipType",
         //    type: "jsreport.AccountType",
         }
