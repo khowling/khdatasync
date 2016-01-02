@@ -3,6 +3,8 @@
 ###Make the Webjob
 cp -r node_modules App_Data/jobs/triggered/sync
 cp sync.js App_Data/jobs/triggered/sync/app.js
+( cd App_Data/jobs/triggered/sync && zip -r pgsync app.js node_modules )
+
 
 
 ###webjob status
