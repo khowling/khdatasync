@@ -55,7 +55,7 @@ var odataServer = ODataServer(process.env.ODATA_HOSTNAME)
 				cb(err);
 		  } else {
 				let qstr = `SELECT ${Object.keys(query['$select']).join(',')} FROM  ${query['collection']}`;
-				if (query['$filter']) {
+				if (query['$filter'] && Object.keys(query['$filter']).length >0) {
 
 					let calWhere = function (whobj) {
 						let fkys = Object.keys(whobj);
