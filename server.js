@@ -56,17 +56,24 @@ var odataServer = ODataServer(process.env.ODATA_HOSTNAME)
 		  } else {
 				let qstr = `SELECT ${Object.keys(query['$select']).join(',')} FROM  ${query['collection']}`;
 				if (query['$filter']) {
-					let fkys = Object.keys(query['$filter']);
-					if (fkys.length >0) {
-						if (fkys[0] === "$or" || fkys[0] === "$and") {
-							let ors = [], orvals = query['$filter'][fkys[0]];
-							for (let f of orvals) {
-								ors.push(` ${Object.keys(f)[0]} = '${f[Object.keys(f)[0]]}' `);
-							}
-							qstr+= ` WHERE ${ors.join(fkys[0].substring(1))}`;
-						} else
-							qstr+= ` WHERE ${fkys[0]} = '${query['$filter'][fkys[0]]}'`;
+
+					let calWhere = function (whobj) {
+						let fkys = Object.keys(whobj);
+						if (fkys.length >0) {
+							if (fkys[0] === "$or" || fkys[0] === "$and") {
+								let ors = [], orvals = whobj[fkys[0]];
+								for (let f of orvals) {
+									if (Object.keys(f)[0] === "$or" || Object.keys(f)[0] === "$and")
+										ors.push( calWhere (f));
+									else
+										ors.push(` ${Object.keys(f)[0]} = '${f[Object.keys(f)[0]]}' `);
+								}
+								return `  ${ors.join(fkys[0].substring(1))} `;
+							} else
+								return ` ${fkys[0]} = '${whobj[fkys[0]]}' `;
+						}
 					}
+					qstr+= ' WHERE ' + calWhere (query['$filter']);
 				}
 				if (query['$limit']) {
 					qstr+= " limit " + query['$limit'];

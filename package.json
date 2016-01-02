@@ -2,7 +2,7 @@
   "name": "myreact",
   "version": "0.0.1",
   "scripts" : {
-    "start": "node app"
+    "start": "node server.js"
   },
   "dependencies": {
     "simple-odata-server": "*",
