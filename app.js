@@ -111,8 +111,8 @@ let importData = function(pg, oauth, syncdef, nextRecordsUrl) {
 					}
 				});
 			} else {
-				console.error('val', err);
-				reject ('val ' + sfrecs);
+				console.error('sfrec', JSON.stringify(sfrecs));
+				resolve ({});
 			}
 		}).on('error', (err) => {
 			console.error('error', err);

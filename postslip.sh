@@ -1,6 +1,6 @@
-. ./env.sh
+. ./ENV.sh
 
-JS=`curl -X POST -d "username=${SF_USERNAME}&password=${SF_PASSWORD}" http://affinityapp.northeurope.cloudapp.azure.com:5000/authenticate`
+JS=`curl -X POST -d "username=${SF_USERNAME}&password=${SF_PASSWORD}" ${AFFINITY_URL}/authenticate`
 
 
 
@@ -9,4 +9,4 @@ TOKEN=`echo $JS | jq -r '.token'`
 
 echo "$SIG $TOKEN"
 
-curl -vX POST -d @khslip.json -H "Content-Type: application/json" -H "x-key: $SIG" -H "x-access-token: $TOKEN" http://affinityapp.northeurope.cloudapp.azure.com:5000/slip/inject
+curl -vX POST -d @khslip.json -H "Content-Type: application/json" -H "x-key: $SIG" -H "x-access-token: $TOKEN" ${AFFINITY_URL}/slip/inject
