@@ -5,9 +5,9 @@ var rest = require('restler');
 var pg = require('pg'),
 	  client = new pg.Client(process.env.PG_URL),
 		IMPORT_DEFS = [
-	//		{schema: 'salesforce', idsequence: 'item__c_id_seq',            table: 'item__c',            fields: [ 'IsDeleted', 'SystemModstamp', 'CreatedDate', 'Name', 'ItemNmb__c', 'Store__c', 'WGI__c', 'ItemFamily__c', 'SubItemGroup__c', 'Category__c'], checkModify: true},
-	//		{schema: 'salesforce', idsequence: 'affinityprofile__c_id_seq', table: 'affinityprofile__c', fields: [ 'IsDeleted', 'SystemModstamp', 'CreatedDate', 'Name', 'Customer__c', 'CustomerCardID__c', 'Transfer__c']},
-	//		{schema: 'salesforce', idsequence: 'affinityrule__c_id_seq',    table: 'affinityrule__c',    fields: [ 'IsDeleted', 'SystemModstamp', 'CreatedDate', 'Name', 'Active__c', 'GeneratedCode__c'], checkModify: true},
+			{schema: 'salesforce', idsequence: 'item__c_id_seq',            table: 'item__c',            fields: [ 'IsDeleted', 'SystemModstamp', 'CreatedDate', 'Name', 'ItemNmb__c', 'Store__c', 'WGI__c', 'ItemFamily__c', 'SubItemGroup__c', 'Category__c'], checkModify: true},
+			{schema: 'salesforce', idsequence: 'affinityprofile__c_id_seq', table: 'affinityprofile__c', fields: [ 'IsDeleted', 'SystemModstamp', 'CreatedDate', 'Name', 'Customer__c', 'CustomerCardID__c', 'Transfer__c']},
+			{schema: 'salesforce', idsequence: 'affinityrule__c_id_seq',    table: 'affinityrule__c',    fields: [ 'IsDeleted', 'SystemModstamp', 'CreatedDate', 'Name', 'Active__c', 'GeneratedCode__c'], checkModify: true},
 			{schema: 'salesforce', idsequence: 'coupon_zuweisung__c_id_seq',table: 'coupon_zuweisung__c',fields: [ 'IsDeleted', 'SystemModstamp', 'CreatedDate', 'Name', 'Store__c', 'Coupon__c', 'CustomerCardId__c', 'PromotionID__c', 'EIngeloest__c', 'Eingeloest_Am__c', 'ValidFrom__c', 'ValidTo__c' ], checkModify: true}
 		];
 
