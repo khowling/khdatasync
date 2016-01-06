@@ -5,7 +5,7 @@ var Redis = require('ioredis'),
     pg = require('pg'),
     client = new pg.Client(process.env.PG_URL),
     rest = require('restler'),
-    async = require('./async.js'),
+    async = require('./lib/async.js'),
     zlib = require('zlib');
 
 

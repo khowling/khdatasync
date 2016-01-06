@@ -1,11 +1,11 @@
 "use strict"
 
 var Redis = require('ioredis'),
-    redis = new Redis(process.env.REDIS_URL, {password: 'ilSDt67n75r2hrhCgnctoDYJKQ9wYGQJYqQbH8WaDPk=' }),
+    redis = new Redis(process.env.REDIS_URL),
 //    pg = require('pg'),
 //    client = new pg.Client(process.env.PG_URL),
     rest = require('restler'),
-    async = require('./async.js');
+    async = require('./lib/async.js');
 
 
 
