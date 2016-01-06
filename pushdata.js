@@ -8,122 +8,6 @@ var Redis = require('ioredis'),
     async = require('./async.js'),
     zlib = require('zlib');
 
-// ------------------------------------------------------------- Salesforce -> Redis
-// ----------------- AffinityProfiles
-let importAffProfile = function(oauth, nextRecordsUrl) {
-	return new Promise(function (resolve, reject)  {
-		// query for ALL salesforce records
-		rest.get (oauth.instance_url + ( nextRecordsUrl || '/services/data/v35.0/query'), {
-			headers: {
-				'Authorization': 'Bearer ' +oauth.access_token,
-				'Sforce-Query-Options': 'batchSize=500'
-			},
-			query: {
-				q:'select Id, CustomerCardID__c, Transfer__c  from AffinityProfile__c'
-			}
-		}).on('complete', (sfrecs) => {
-//			console.log ('val : ' + JSON.stringify(val));
-			if (sfrecs.records && sfrecs.records.length >0) {
-        let setxref = []
-        for (let sfrec of sfrecs.records) {
-          setxref.push(sfrec.CustomerCardID__c);
-          setxref.push(sfrec.Id);
-        }
-        redis.hmset ("cardtoaffid",  setxref).then(succ => {
-          async(updateRedisWithSFDCAffProfiles, sfrecs.records).then(succ => {
-            console.log ('added ' + succ);
-            if (sfrecs.done)
-              resolve({});
-            else
-              importAffProfile (oauth, sfrecs.nextRecordsUrl).then(resolve);
-          }, err => {
-            console.error('error reject', err);
-            reject(err);
-          }).catch(err => {
-            console.error('error catch', err);
-            reject(err);
-          });
-        });
-      } else {
-				console.error('sfrec', JSON.stringify(sfrecs));
-				resolve ({});
-			}
-		}).on('error', (err) => {
-			console.error('error', err);
-			reject('err : ' + err);
-		}).on ('fail', (err) => {
-			console.error('fail', err);
-			reject('fail : ' + err);
-		});
-	}).catch ((e) => console.error ('catch ', e));
-}
-
-function* updateRedisWithSFDCAffProfiles (sfrecs) {
-  let added = 0;
-  for (let sfrec of sfrecs) {
-    let key = `profile:${sfrec.CustomerCardID__c}:buckets`,
-        exists = yield redis.exists(key);
-    if (exists == 0) {
-      added++;
-      yield redis.hmset (key, JSON.parse(sfrec.Transfer__c).map((v,i) => i%2? Number.isFinite(v) && v*1000 || 0 : v));
-    }
-  }
-  return added;
-}
-
-// ----------------- Items
-let importItems = function(oauth, nextRecordsUrl) {
-	return new Promise(function (resolve, reject)  {
-		// query for ALL salesforce records
-		rest.get (oauth.instance_url + ( nextRecordsUrl || '/services/data/v35.0/query'), {
-			headers: {
-				'Authorization': 'Bearer ' +oauth.access_token,
-				'Sforce-Query-Options': 'batchSize=500'
-			},
-			query: {
-				q:'select Id, ItemNmb__c, Store__c, WGI__c, ItemFamily__c, SubItemGroup__c from Item__c'
-			}
-		}).on('complete', (sfrecs) => {
-//			console.log ('val : ' + JSON.stringify(val));
-			if (sfrecs.records && sfrecs.records.length >0) {
-
-          async(updateRedisWithSFDCItems, sfrecs.records).then(succ => {
-            console.log ('added ' + succ);
-            if (sfrecs.done)
-              resolve({});
-            else
-              importItems (oauth, sfrecs.nextRecordsUrl).then(resolve);
-          }, err => {
-            console.error('error reject', err);
-            reject(err);
-          }).catch(err => {
-            console.error('error catch', err);
-            reject(err);
-          });
-
-      } else {
-				console.error('sfrec', JSON.stringify(sfrecs));
-				resolve ({});
-			}
-		}).on('error', (err) => {
-			console.error('error', err);
-			reject('err : ' + err);
-		}).on ('fail', (err) => {
-			console.error('fail', err);
-			reject('fail : ' + err);
-		});
-	}).catch ((e) => console.error ('catch ', e));
-}
-
-function* updateRedisWithSFDCItems (sfrecs) {
-  let added = 0;
-  for (let sfrec of sfrecs) {
-    let key = `item:${Number.parseInt(sfrec.ItemNmb__c)}`;
-    added++;
-    yield redis.hmset (key, ["itemnmb__c", Number.parseInt(sfrec.ItemNmb__c) ,"store__c" , sfrec.Store__c ,"sfid" , sfrec.Id, "wgi__c" , sfrec.WGI__c , "subitemgroup__c", sfrec.SubItemGroup__c , "itemfamily__c", sfrec.ItemFamily__c]);
-  }
-  return added;
-}
 
 // --------------------------------------------------------- Redis -> Salesforce
 // Affinity Profiles
@@ -161,9 +45,9 @@ function* exportSlips(oauth, rkey) {
     console.log ('exportSlips # : ' + custids.length);
     let csvlines = [];
     for (let p of custids) {
-      console.log (`exportSlips : getting ${p}`);
+//      console.log (`exportSlips : getting ${p}`);
       let comp64 = yield redis.hget (p, "slip");
-      console.log (`got :  ${comp64}`);
+//      console.log (`got :  ${comp64}`);
       csvlines.push( JSON.parse(yield mkUnzipPromise(new Buffer(comp64, 'base64'))));
     }
     return { popped: custids, formatted_out: csvlines};
@@ -274,7 +158,7 @@ function sfdcUpdateAffProfileBulk(oauth, payloadCSV) {
             '</jobInfo>'
     }).on('complete', (jobresponse) => {
 
-      console.log ('sfdc bulk job');
+//      console.log ('sfdc bulk job');
       let jobid = jobresponse.jobInfo.id[0];
       //console.log ('jobid ' + jobid +  ', payload ' + payload);
       rest.post (oauth.instance_url + '/services/async/35.0/job/'+jobid+'/batch', {
@@ -284,7 +168,7 @@ function sfdcUpdateAffProfileBulk(oauth, payloadCSV) {
         },
         data : payloadCSV
       }).on('complete', (val) => {
-        console.log ('sfdc added batch');
+//        console.log ('sfdc added batch');
         rest.post (oauth.instance_url + '/services/async/35.0/job/'+jobid, {
           headers: {
             'X-SFDC-Session': oauth.access_token,
@@ -295,7 +179,7 @@ function sfdcUpdateAffProfileBulk(oauth, payloadCSV) {
                     '<state>Closed</state>' +
                   '</jobInfo>'
         }).on('complete', (val) => {
-          console.log ('sfdc close job ');
+//          console.log ('sfdc close job ');
           resolve (val);
         });
       }).on('error', (err) => {
@@ -333,7 +217,7 @@ redis.on('connect', function () {
 
       		if (oauthres.access_token && oauthres.instance_url) {
 
-            if (true) {
+            if (false) {
               let rkey = "slips";
               console.log ('Look for ${rkey}');
 
@@ -396,9 +280,9 @@ redis.on('connect', function () {
                     if (formatted_out.length >0) {
                       console.log ('Updating Affinity Profiles # ' +formatted_out.length);
                       let payloadCSV = "Id,Transfer__c\n" + formatted_out.join('\n')
-                      console.log ('payloadCSV: ' + payloadCSV);
+//                      console.log ('payloadCSV: ' + payloadCSV);
                       sfdcUpdateAffProfileBulk (oauthres, payloadCSV).then(succ => {
-                        console.log ('done '+ JSON.stringify(succ));
+                        console.log ('completed '+ JSON.stringify(succ));
                         if (false) // debug
                           redis.sadd(rkey, popped, () => {
                             redis.disconnect();
@@ -432,37 +316,6 @@ redis.on('connect', function () {
                 }
               });
             }
-
-            if (false) {
-              // Import to Redis
-              console.log ('import');
-              importAffProfile(oauthres).then (succ => {
-                console.log ('importAffProfile done '+ JSON.stringify(succ));
-                importItems(oauthres).then (succ => {
-                  console.log ('importItems done '+ JSON.stringify(succ));
-                  redis.disconnect();
-                  client.end();
-                }, rej => {
-                  console.error ('importItems rejection : ' + rej);
-                  redis.disconnect();
-                  client.end();
-                }).catch (err => {
-                  console.error ('importItems error ' + err);
-                  redis.disconnect();
-                  client.end();
-                });
-
-              }, rej => {
-                console.error ('importAffProfile rejection : ' + rej);
-                redis.disconnect();
-                client.end();
-              }).catch (err => {
-                console.error ('importAffProfile error ' + err);
-                redis.disconnect();
-                client.end();
-              });
-            }
-
           } else {
             console.error('no salesforce');
             redis.disconnect();
