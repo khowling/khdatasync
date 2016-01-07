@@ -2,8 +2,11 @@
 
 var Redis = require('ioredis'),
     redis = new Redis(process.env.REDIS_URL),
-    pg = require('pg'),
-    client = new pg.Client(process.env.PG_URL),
+//    pg = require('pg'),  
+//    client = new pg.Client(process.env.PG_URL),
+    Connection = require('tedious').Connection,
+    Request = require('tedious').Request,
+    TYPES = require('tedious').TYPES,
     rest = require('restler'),
     async = require('./lib/async.js'),
     zlib = require('zlib');
@@ -11,13 +14,14 @@ var Redis = require('ioredis'),
 
 // --------------------------------------------------------- Redis -> Salesforce
 // Affinity Profiles
-function* exportAffProfile(oauth, rkey, xref) {
+function* exportAffProfile(rkey, xref) {
     let custids = [];
-    for (let i = 0; i < 1000; i++) {
+    for (let i = 0; i < 10000; i++) {
       let rpop = yield redis.spop(rkey); //s
       if (rpop)
         custids.push(rpop);
-      else break;
+      else 
+        break;
     }
     console.log ('exportAffProfile # : ' + custids.length);
     let csvlines = [];
@@ -34,23 +38,23 @@ function* exportAffProfile(oauth, rkey, xref) {
     return { popped: custids, formatted_out: csvlines};
 }
 // Slips
-function* exportSlips(oauth, rkey) {
+function* exportSlips(rkey) {
     let custids = [];
-    for (let i = 0; i < 2; i++) {
-      let rpop = yield redis.srandmember(rkey); //srandmember  spop
+    for (let i = 0; i < 100; i++) {
+      let rpop = yield redis.spop(rkey); //srandmember  spop
       if (rpop)
         custids.push(rpop);
       else break;
     }
     console.log ('exportSlips # : ' + custids.length);
-    let csvlines = [];
+    let strlines = [];
     for (let p of custids) {
 //      console.log (`exportSlips : getting ${p}`);
       let comp64 = yield redis.hget (p, "slip");
 //      console.log (`got :  ${comp64}`);
-      csvlines.push( JSON.parse(yield mkUnzipPromise(new Buffer(comp64, 'base64'))));
+      strlines.push( JSON.parse(yield mkUnzipPromise(new Buffer(comp64, 'base64'))));
     }
-    return { popped: custids, formatted_out: csvlines};
+    return { popped: custids, formatted_out: strlines};
 }
 
 function mkUnzipPromise(arg) {
@@ -142,6 +146,84 @@ function pgInsertSlips(pg, syncdef, slips, headids) {
     }
   });
 }
+// ------------------------------------------- AZURE SQL
+var SQLTABLES = {
+  'slip':
+    {schema: 'dbo',table: 'AzureSlip',  additional: "tsdbinsert",
+    fields:    ['companyid', 'customercardid','storeid','enddatetime','totalamount','tsreceived','tsqueueinsert','tsworkerreceived','tsstartcrunsh','tsendcrunsh'],
+    sourceMap: ['Transaction.CompanyID','Transaction.Customer.CustomerID','Transaction.StoreID','Transaction.EndDateTime','Transaction.TotalAmount','tsreceived','tsqueueinsert','tsworkerreceived','tsstartcrunsh','tsendcrunsh']
+  },
+  'slipitem':
+    {schema: 'dbo',table: 'AzureSlipItem', itterator: 'Transaction.Sale', additional: "slip",
+    fields:    ['codeinput', 'itemid', 'scaninput','quantity','currentunitprice','extendedamount','originalamount','attributevalue','sfdcitemid','dicountamount','discountableamount','discountname','promotionid'],
+    sourceMap: ['CodeInput','ItemID','ScanInput','Quantity','CurrentUnitPrice','ExtendedAmount','OriginalAmount','AttributeValue','Item.sfid','Discount.DiscountAmount','Discount.DiscountableAmount','Discount.DiscountName','Discount.PromotionID']
+  }
+};
+function sqlInsertSlips(sql, syncdef, slips, headids) {
+  return new Promise ((resolve, reject) => {
+
+    if (slips.length >0) {
+      let insstr = `INSERT INTO ${syncdef.schema}.${syncdef.table} (${syncdef.additional},${syncdef.fields.join(',').toLowerCase()}) OUTPUT INSERTED.id VALUES `,
+          req_params = [], posall = [];
+      for (let hidx = 0; hidx < slips.length; hidx++) {
+        for (let r of syncdef.itterator ? resolvedot(syncdef.itterator, slips[hidx]) : [slips[hidx]]) {
+          let posrow = [];
+
+          if (syncdef.additional === 'tsdbinsert')
+              posrow.push ('CURRENT_TIMESTAMP');
+          else if (syncdef.additional === 'slip') {
+              req_params.push([`P${req_params.length+1}`, TYPES.Int, headids[hidx].id]);
+              posrow.push (`@P${req_params.length}`);
+          }
+
+          for (let i = 0; i < syncdef.fields.length; i++) {
+            let tf = syncdef.fields[i], sf = syncdef.sourceMap[i].split('.'),
+                sval = resolvedot(syncdef.sourceMap[i], r);
+
+            if (tf === "enddatetime" || tf === "tsreceived" || tf === "tsqueueinsert" || tf === "tsworkerreceived" || tf === "tsstartcrunsh" || tf === "tsendcrunsh")
+              if (sval)
+                req_params.push ([`P${req_params.length+1}`, TYPES.DateTime, new Date(sval)]); 
+              else
+                req_params.push ([`P${req_params.length+1}`, TYPES.DateTime, null]);
+            else if (tf == "totalamount")
+              req_params.push ([`P${req_params.length+1}`, TYPES.Float, sval]);
+            else
+              req_params.push ([`P${req_params.length+1}`, TYPES.VarChar, sval]);
+            posrow.push (`@P${req_params.length}`);
+          }
+          posall.push (`(${posrow.join(', ')})`);
+        }
+      }
+      insstr+= posall.join(',') ;
+      
+
+      // insert into sql
+      let retrow = [];
+  //    console.log ('prepare ' + insstr);
+      let request = new Request(insstr,  function(err) {
+        if (err) {
+          console.error('prepare insert error', err);
+          reject ('prepare insert error' + err);
+        } else {
+          console.log('finished inserting ' + syncdef.table + ' : ' + retrow.length);
+          return resolve(retrow);
+        }
+      });
+      
+      for (let p of req_params) {
+        request.addParameter(p[0], p[1], p[2]);
+      }
+
+      request.on('row', function (columns) { 
+        retrow.push({id: columns[0].value});
+        //console.log ('row : ' + JSON.stringify(columns));
+      });
+      sql.execSql(request);
+          
+    } else 
+      resolve([]);
+  });
+}
 // -------------------- BULK SFDC
 function sfdcUpdateAffProfileBulk(oauth, payloadCSV) {
   return new Promise ((resolve, reject) => {
@@ -180,7 +262,7 @@ function sfdcUpdateAffProfileBulk(oauth, payloadCSV) {
                   '</jobInfo>'
         }).on('complete', (val) => {
 //          console.log ('sfdc close job ');
-          resolve (val);
+          resolve (val.jobInfo && `sfdc batch id : ${val.jobInfo.id[0]}`);
         });
       }).on('error', (err) => {
         console.error('error', err);
@@ -199,13 +281,95 @@ function sfdcUpdateAffProfileBulk(oauth, payloadCSV) {
   });
 }
 
+            
+function exportSlipsMain(connection) {
+  return new Promise ((resolve, reject) => {
+    let rkey = "slips";
+    console.log (`exportSlipsMain : look for ${rkey}`);
 
-console.log (`Connecting Redis ...... [${process.env.REDIS_URL}]`);
-redis.on('connect', function () {
-  client.connect((err) => {
+    async(exportSlips, rkey).then((redisprofiles) => {
+      let popped = redisprofiles.popped, formatted_out =  redisprofiles.formatted_out;
+      if (formatted_out.length >0) {
+        console.error ('exportSlipsMain got Slips : ' + formatted_out.length);
+        sqlInsertSlips (connection, SQLTABLES.slip, formatted_out).then(succ => {
+          console.log (`exportSlipsMain inserted ${SQLTABLES.slip.table} : ${succ.length}`);
+          sqlInsertSlips (connection, SQLTABLES.slipitem, formatted_out, succ).then(succ => {
+            console.log (`exportSlipsMain inserted ${SQLTABLES.slipitem.table} : ${succ.length}`);
+            redis.del(popped, () => {
+              resolve (succ);
+            });
+          }, rej => {
+            reject ('sqlInsertSlipsItems rejection : ' + rej);
+          }).catch (err => {
+            reject ('sqlInsertSlipsItems error ' + err);
+          });
+        }, rej => {
+          reject ('sqlInsertSlips rejection : ' + rej);
+        }).catch (err => {
+          reject ('sqlInsertSlips error ' + err);
+        });
+      } else
+        return  resolve ('Nothing to do');
+    }, rej => {
+      reject ('exportSlips rejection : ' + rej);
+    }).catch (err => {
+      reject ('exportSlips error ' + err);
+    });
+  });
+}
+
+function exportPromotionsMain (oauthres, connection) {
+  return new Promise ((resolve, reject) => {
+    let rkey = "promotions";
+
+    redis.hgetall ("cardtoaffid", (err, xref) => {
+      if (err) {
+        console.error ('cardtoaffid err : ' + err);
+        redis.disconnect();
+        connection.close();
+      } else {
+        console.log (`exportPromotionsMain : Look for ${rkey}`);
+        async(exportAffProfile, rkey, xref).then((redisprofiles) => {
+          let popped = redisprofiles.popped, formatted_out =  redisprofiles.formatted_out;
+          if (formatted_out.length >0) {
+            console.log ('Updating Affinity Profiles # ' +formatted_out.length);
+            let payloadCSV = "Id,Transfer__c\n" + formatted_out.join('\n')
+//                      console.log ('payloadCSV: ' + payloadCSV);
+            sfdcUpdateAffProfileBulk (oauthres, payloadCSV).then(succ => {
+              resolve (succ);
+            }, err => {
+              console.error ('sfdcUpdateAffProfileBulk error, put back popped : ', err);
+              redis.sadd(rkey, popped, () => reject (err));
+            });
+          } else {
+            resolve ('Nothing to do');
+          }
+        }, rej => {
+          reject ('exportAffProfile rejection : ' + rej);
+        }).catch (err => {
+          reject ('exportAffProfile error ' + err);
+        });
+      }
+    });
+  });
+}
+            
+
+console.log (`Connecting Redis ......`);
+redis.on('connect',  () => {
+  console.log ('Connected Azure SQL ......');
+  let connection = new Connection({
+      userName: 'khowling',
+      password: 'sForce123',
+      server: 'affinitydb.database.windows.net',
+      // When you connect to Azure SQL Database, you need these next options.
+      options: {encrypt: true, database: 'affinitydb'}
+  });
+  connection.on('connect', (err) => {
     if(err) {
-      return console.error('could not connect to postgres', err);
+      return console.error('could not connect to SQL', err);
     } else {
+      console.log ('Connected Salesforce ......');  
     	rest.post('https://login.salesforce.com/services/oauth2/token', {
     		query: {
     			grant_type:'password',
@@ -216,110 +380,25 @@ redis.on('connect', function () {
     		}}).on('complete', function(oauthres) {
 
       		if (oauthres.access_token && oauthres.instance_url) {
-
-            if (false) {
-              let rkey = "slips";
-              console.log ('Look for ${rkey}');
-
-              async(exportSlips, oauthres, rkey).then((redisprofiles) => {
-                let popped = redisprofiles.popped, formatted_out =  redisprofiles.formatted_out;
-                if (formatted_out.length >0) {
-                  console.error ('exportSlips got SLips : ' + formatted_out.length);
-                  pgInsertSlips (client, PGTABLES.slip, formatted_out).then(succ => {
-                    console.log (`got ${JSON.stringify(succ)}`);
-
-                    pgInsertSlips (client, PGTABLES.slipitem, formatted_out, succ.rows).then(succ => {
-                      if (false) // debug
-                        redis.del(popped, () => {
-                          console.log (`got ${JSON.stringify(succ)}`);
-                          redis.disconnect();
-                          client.end();
-                        });  // ### DEBUG LINE ONLY
-                      else {
-                        console.log (`got ${JSON.stringify(succ)}`);
-                        redis.disconnect();
-                        client.end();
-                      }
-                    });
-
-
-                  }, rej => {
-                    console.error ('pgInsertSlips rejection : ' + rej);
-                    redis.disconnect();
-                    client.end();
-                  }).catch (err => {
-                    console.error ('pgInsertSlips error ' + err);
-                    redis.disconnect();
-                    client.end();
-                  });
-
-                }
-              }, rej => {
-                console.error ('exportSlips rejection : ' + rej);
+            exportSlipsMain(connection).then (succ => {
+              exportPromotionsMain(oauthres, connection).then (succ => {
+                console.log (`exportPromotionsMain success :  ${JSON.stringify(succ)}`);
                 redis.disconnect();
-                client.end();
-              }).catch (err => {
-                console.error ('exportSlips error ' + err);
+                connection.close();
+              }, err => {
+                console.error (`exportPromotionsMain failed :  ${JSON.stringify(err)}`);
                 redis.disconnect();
-                client.end();
+                connection.close();
               });
-            }
-
-            if (false) {
-              let rkey = "promotions";
-              console.log ('Look for ${rkey}');
-              redis.hgetall ("cardtoaffid", (err, xref) => {
-                if (err) {
-                  console.error ('cardtoaffid err : ' + err);
-                  redis.disconnect();
-                  client.end();
-                } else {
-
-                  async(exportAffProfile, oauthres, rkey, xref).then((redisprofiles) => {
-                    let popped = redisprofiles.popped, formatted_out =  redisprofiles.formatted_out;
-                    if (formatted_out.length >0) {
-                      console.log ('Updating Affinity Profiles # ' +formatted_out.length);
-                      let payloadCSV = "Id,Transfer__c\n" + formatted_out.join('\n')
-//                      console.log ('payloadCSV: ' + payloadCSV);
-                      sfdcUpdateAffProfileBulk (oauthres, payloadCSV).then(succ => {
-                        console.log ('completed '+ JSON.stringify(succ));
-                        if (false) // debug
-                          redis.sadd(rkey, popped, () => {
-                            redis.disconnect();
-                            client.end();
-                          });  // ### DEBUG LINE ONLY
-                        else {
-                          redis.disconnect();
-                          client.end();
-                        }
-                      }, err => {
-                        console.error ('sfdcUpdateAffProfileBulk error', err);
-                        console.log ('put back popped for next run');
-                        redis.sadd(rkey, popped);
-                        redis.disconnect();
-                        client.end();
-                      });
-                    } else {
-                      console.log ('Nothing to do');
-                      redis.disconnect();
-                      client.end();
-                    }
-                  }, rej => {
-                    console.error ('exportAffProfile rejection : ' + rej);
-                    redis.disconnect();
-                    client.end();
-                  }).catch (err => {
-                    console.error ('exportAffProfile error ' + err);
-                    redis.disconnect();
-                    client.end();
-                  });
-                }
-              });
-            }
+            }, err => {
+              console.error (`exportSlipsMain failed :  ${JSON.stringify(err)}`);
+              redis.disconnect();
+              connection.close();
+            });
           } else {
             console.error('no salesforce');
             redis.disconnect();
-            client.end();
+            connection.close();
           }
         });
     }
@@ -328,5 +407,4 @@ redis.on('connect', function () {
 
 redis.on('error', function (e) {
   console.error ('Redis error',e);
-  client.end();
 });
