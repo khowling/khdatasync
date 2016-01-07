@@ -23,11 +23,31 @@ var model = {
 					  "tsstartcrunsh": {"type": "Edm.DateTimeOffset"},
 					  "tsendcrunsh": {"type": "Edm.DateTimeOffset"},
 					  "tsdbinsert": {"type": "Edm.DateTimeOffset"}
+				},
+        "SlipItemType": {
+            "id": {"type": "Edm.String", key: true},
+            "slip": {"type": "Edm.String"},
+            "codeinput": {"type": "Edm.String"},
+            "scaninput": {"type": "Edm.String"},
+            "quantity": {"type": "Edm.Double"},
+            "currentunitprice": {"type": "Edm.Double"},
+            "extendedamount": {"type": "Edm.Double"},
+            "originalamount": {"type": "Edm.Double"},  //yyyy-MM-ddTHH:mm:ss.fffZ or yyyy-MM-ddTHH:mm:ss.fff[+&#124;-]HH:mm 2015-04-15T10:30:09.7550000Z
+						"itemid": {"type": "Edm.String"},
+					  "sfdcitemid": {"type": "Edm.String"},
+					  "attributevalue": {"type": "Edm.String"},
+					  "dicountamount": {"type": "Edm.Double"},
+					  "discountableamount": {"type": "Edm.Double"},
+					  "discountname": {"type": "Edm.String"},
+            "promotionid": {"type": "Edm.String"}
 				}
     },
     entitySets: {
         "AzureSlip": {
           entityType: "jsreport.SlipType"
+        },
+        "AzureSlipItem": {
+          entityType: "jsreport.SlipItemType"
         }
     }
 };
