@@ -1,8 +1,11 @@
 'use strict'
 
-var http = require('http');
-var ODataServer = require("simple-odata-server");
-var pg = require('pg');
+var http = require('http'),
+    ODataServer = require("simple-odata-server"),
+    //pg = require('pg');
+    Connection = require('tedious').Connection,
+    Request = require('tedious').Request,
+    TYPES = require('tedious').TYPES;
 
 var model = {
     namespace: "jsreport",
@@ -15,21 +18,15 @@ var model = {
             "totalamount": {"type": "Edm.Double"},
             "enddatetime": {"type": "Edm.DateTimeOffset"},  //yyyy-MM-ddTHH:mm:ss.fffZ or yyyy-MM-ddTHH:mm:ss.fff[+&#124;-]HH:mm 2015-04-15T10:30:09.7550000Z
 						"tsreceived": {"type": "Edm.DateTimeOffset"},
-					 "tsqueueinsert": {"type": "Edm.DateTimeOffset"},
-					 "tsworkerreceived": {"type": "Edm.DateTimeOffset"},
-					 "tsstartcrunsh": {"type": "Edm.DateTimeOffset"},
-					 "tsendcrunsh": {"type": "Edm.DateTimeOffset"},
-					 "tsdbinsert": {"type": "Edm.DateTimeOffset"},
-					 "tsreceivedstr": {"type": "Edm.String"},
-					 "tsworkerreceivedstr": {"type": "Edm.String"},
-					 "tsstartcrunchstr": {"type": "Edm.String"},
-					 "tsendcrunchstr": {"type": "Edm.String"},
-					 "tsdbinsertstr": {"type": "Edm.String"},
-					 "tsqueueinsertstr": {"type": "Edm.String"}
+					  "tsqueueinsert": {"type": "Edm.DateTimeOffset"},
+					  "tsworkerreceived": {"type": "Edm.DateTimeOffset"},
+					  "tsstartcrunsh": {"type": "Edm.DateTimeOffset"},
+					  "tsendcrunsh": {"type": "Edm.DateTimeOffset"},
+					  "tsdbinsert": {"type": "Edm.DateTimeOffset"}
 				}
     },
     entitySets: {
-        "slip": {
+        "AzureSlip": {
           entityType: "jsreport.SlipType"
         }
     }
@@ -42,19 +39,33 @@ var model = {
 //  if(err) {
 //    return console.error('could not connect to postgres', err);
 //  } else {
-console.log ('Starting odata server on : ' + process.env.ODATA_HOSTNAME);
-var odataServer = ODataServer(process.env.ODATA_HOSTNAME)
-  .model(model)
-  .query((setName, query, cb) => {
-		let client = new pg.Client(process.env.PG_URL);
-		console.log ('Connecting to (need to do it here because Azure cannot keep open a connection) : ' + process.env.PG_URL);
 
-		client.connect(function(err) {
-		  if(err) {
-		    console.error('could not connect to postgres', err);
-				cb(err);
-		  } else {
-				let qstr = `SELECT ${Object.keys(query['$select']).join(',')} FROM  ${query['collection']}`;
+console.log ('Connected Azure SQL ......');
+let connection = new Connection({
+    userName: 'khowling',
+    password: 'sForce123',
+    server: 'affinitydb.database.windows.net',
+    // When you connect to Azure SQL Database, you need these next options.
+    options: {encrypt: true, database: 'affinitydb'}
+});
+connection.on('connect', (err) => {
+  if(err) {
+    return console.error('could not connect to SQL', err);
+  } else {
+
+    console.log ('Starting odata server on : ' + process.env.ODATA_HOSTNAME);
+    var odataServer = ODataServer(process.env.ODATA_HOSTNAME)
+      .model(model)
+      .query((setName, query, cb) => {
+//		let client = new pg.Client(process.env.PG_URL);
+//		console.log ('Connecting to (need to do it here because Azure cannot keep open a connection) : ' + process.env.PG_URL);
+
+//		client.connect(function(err) {
+//		  if(err) {
+//		    console.error('could not connect to postgres', err);
+//				cb(err);
+//		  } else {
+				let qstr = ` ${Object.keys(query['$select']).join(',')} FROM  ${query['collection']}`;
 				if (query['$filter'] && Object.keys(query['$filter']).length >0) {
 
 					let calWhere = function (whobj) {
@@ -76,10 +87,45 @@ var odataServer = ODataServer(process.env.ODATA_HOSTNAME)
 					qstr+= ' WHERE ' + calWhere (query['$filter']);
 				}
 				if (query['$limit']) {
-					qstr+= " limit " + query['$limit'];
-				}
+					//qstr+= " limit " + query['$limit'];
+          qstr = `TOP (${query['$limit']}) ` + qstr;
+				} else if (query['$top']) {
+          qstr = `TOP (${query['$top']}) ` + qstr;
+        }
+
 				console.log ("request with : " + JSON.stringify(query));
 				console.log ("query with : " + qstr);
+
+        var result = [];
+        let request = new Request('SELECT ' + qstr, function(err) {
+          if (err) {
+            console.log ("query err " + JSON.stringify(err));
+            cb(err);
+          } else {
+            console.log ("query succ " + JSON.stringify(result));
+						cb(null, {
+								count: result.length,
+								value: result
+						});
+          }
+        });
+
+        request.on('row', function(columns) {
+          console.log ("query row " + JSON.stringify(columns));
+          let row = {};
+          for (let c of columns) {
+            row[c.metadata.colName] = c.value;
+          }
+          console.log ("push row " + JSON.stringify(row));
+          result.push(row);
+        });
+
+        request.on('done', function(rowCount, more) {
+          console.log(rowCount + ' rows returned');
+        });
+        connection.execSql(request);
+      });
+/*
 				client.query(qstr, function(err, result) {
 					client.end();
 					if (err) {
@@ -93,9 +139,9 @@ var odataServer = ODataServer(process.env.ODATA_HOSTNAME)
 						});
 					}
 				});
-			}
-		});
-  });
-http.createServer(odataServer.handle.bind(odataServer)).listen(process.env.PORT ||1337);
+*/
+      http.createServer(odataServer.handle.bind(odataServer)).listen(process.env.PORT ||1337);
+    }
+});
 //	}
 //});
