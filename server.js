@@ -32,7 +32,7 @@ var model = {
             "quantity": {"type": "Edm.Decimal"},
             "currentunitprice": {"type": "Edm.Double"},
             "extendedamount": {"type": "Edm.Double"},
-            "originalamount": {"type": "Edm.Decimal"},  //yyyy-MM-ddTHH:mm:ss.fffZ or yyyy-MM-ddTHH:mm:ss.fff[+&#124;-]HH:mm 2015-04-15T10:30:09.7550000Z
+            "originalamount": {"type": "Edm.Double"},  //yyyy-MM-ddTHH:mm:ss.fffZ or yyyy-MM-ddTHH:mm:ss.fff[+&#124;-]HH:mm 2015-04-15T10:30:09.7550000Z
 						"itemid": {"type": "Edm.String"},
 					  "sfdcitemid": {"type": "Edm.String"},
 					  "attributevalue": {"type": "Edm.String"},
@@ -52,7 +52,6 @@ var model = {
     }
 };
 
-
 //pg.defaults.poolSize = 5;
 //pg.defaults.poolIdleTimeout = 3000; // 5 seconds (try to overcome the azure loadbalancer)
 //pg.connect(process.env.PG_URL, function(err, client, done) {
@@ -67,6 +66,9 @@ let connection = new Connection({
     server: 'affinitydb.database.windows.net',
     // When you connect to Azure SQL Database, you need these next options.
     options: {encrypt: true, database: 'affinitydb'}
+});
+connection.on('err', (err) => {
+  console.error('connect to SQL err', err);
 });
 connection.on('connect', (err) => {
   if(err) {
@@ -134,7 +136,12 @@ connection.on('connect', (err) => {
           console.log ("query row " + JSON.stringify(columns));
           let row = {};
           for (let c of columns) {
-            row[c.metadata.colName] = c.value;
+            let enttype = model.entitySets[query['collection']].entityType.split(".")[1];
+            if (model.entityTypes[enttype][c.metadata.colName]["type"] === "Edm.Double" && c.value && c.value % 1 == 0) {
+              console.log ('times by 1.0001: ' + c.value);
+              row[c.metadata.colName] = c.value + 0.00001;
+            } else
+              row[c.metadata.colName] = c.value;
           }
           console.log ("push row " + JSON.stringify(row));
           result.push(row);
