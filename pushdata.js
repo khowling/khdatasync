@@ -2,7 +2,7 @@
 
 var Redis = require('ioredis'),
     redis = new Redis(process.env.REDIS_URL),
-//    pg = require('pg'),  
+//    pg = require('pg'),
 //    client = new pg.Client(process.env.PG_URL),
     Connection = require('tedious').Connection,
     Request = require('tedious').Request,
@@ -20,7 +20,7 @@ function* exportAffProfile(rkey, xref) {
       let rpop = yield redis.spop(rkey); //s
       if (rpop)
         custids.push(rpop);
-      else 
+      else
         break;
     }
     console.log ('exportAffProfile # : ' + custids.length);
@@ -40,7 +40,7 @@ function* exportAffProfile(rkey, xref) {
 // Slips
 function* exportSlips(rkey) {
     let custids = [];
-    for (let i = 0; i < 100; i++) {
+    for (let i = 0; i < 10000; i++) {
       let rpop = yield redis.spop(rkey); //srandmember  spop
       if (rpop)
         custids.push(rpop);
@@ -159,13 +159,16 @@ var SQLTABLES = {
     sourceMap: ['CodeInput','ItemID','ScanInput','Quantity','CurrentUnitPrice','ExtendedAmount','OriginalAmount','AttributeValue','Item.sfid','Discount.DiscountAmount','Discount.DiscountableAmount','Discount.DiscountName','Discount.PromotionID']
   }
 };
-function sqlInsertSlips(sql, syncdef, slips, headids) {
+var MAX_SLIP_INSERT = 10; //(10 = 100 slip items = 2000 slipitem positional fields (SQL max 2100))
+function sqlInsertSlips(sql, syncdef, slips, headids, sidx, retrow) {
   return new Promise ((resolve, reject) => {
-
-    if (slips.length >0) {
+    if (!sidx) {
+      sidx = 0; retrow = [];
+    }
+    if (slips.length > sidx) {
       let insstr = `INSERT INTO ${syncdef.schema}.${syncdef.table} (${syncdef.additional},${syncdef.fields.join(',').toLowerCase()}) OUTPUT INSERTED.id VALUES `,
           req_params = [], posall = [];
-      for (let hidx = 0; hidx < slips.length; hidx++) {
+      for (let hidx = sidx; hidx < slips.length && hidx < (sidx + MAX_SLIP_INSERT); hidx++) {
         for (let r of syncdef.itterator ? resolvedot(syncdef.itterator, slips[hidx]) : [slips[hidx]]) {
           let posrow = [];
 
@@ -182,7 +185,7 @@ function sqlInsertSlips(sql, syncdef, slips, headids) {
 
             if (tf === "enddatetime" || tf === "tsreceived" || tf === "tsqueueinsert" || tf === "tsworkerreceived" || tf === "tsstartcrunsh" || tf === "tsendcrunsh")
               if (sval)
-                req_params.push ([`P${req_params.length+1}`, TYPES.DateTime, new Date(sval)]); 
+                req_params.push ([`P${req_params.length+1}`, TYPES.DateTime, new Date(sval)]);
               else
                 req_params.push ([`P${req_params.length+1}`, TYPES.DateTime, null]);
             else if (tf == "totalamount")
@@ -195,10 +198,8 @@ function sqlInsertSlips(sql, syncdef, slips, headids) {
         }
       }
       insstr+= posall.join(',') ;
-      
 
-      // insert into sql
-      let retrow = [];
+
   //    console.log ('prepare ' + insstr);
       let request = new Request(insstr,  function(err) {
         if (err) {
@@ -206,21 +207,25 @@ function sqlInsertSlips(sql, syncdef, slips, headids) {
           reject ('prepare insert error' + err);
         } else {
           console.log('finished inserting ' + syncdef.table + ' : ' + retrow.length);
-          return resolve(retrow);
+          if (slips.length > (sidx + MAX_SLIP_INSERT))
+            sqlInsertSlips(sql, syncdef, slips, headids, (sidx + MAX_SLIP_INSERT), retrow).then(resolve);
+          else {
+            return resolve(retrow);
+          }
         }
       });
-      
+
       for (let p of req_params) {
         request.addParameter(p[0], p[1], p[2]);
       }
 
-      request.on('row', function (columns) { 
+      request.on('row', function (columns) {
         retrow.push({id: columns[0].value});
         //console.log ('row : ' + JSON.stringify(columns));
       });
       sql.execSql(request);
-          
-    } else 
+
+    } else
       resolve([]);
   });
 }
@@ -281,7 +286,7 @@ function sfdcUpdateAffProfileBulk(oauth, payloadCSV) {
   });
 }
 
-            
+
 function exportSlipsMain(connection) {
   return new Promise ((resolve, reject) => {
     let rkey = "slips";
@@ -292,9 +297,9 @@ function exportSlipsMain(connection) {
       if (formatted_out.length >0) {
         console.error ('exportSlipsMain got Slips : ' + formatted_out.length);
         sqlInsertSlips (connection, SQLTABLES.slip, formatted_out).then(succ => {
-          console.log (`exportSlipsMain inserted ${SQLTABLES.slip.table} : ${succ.length}`);
+          console.log (`exportSlipsMain inserted ${SQLTABLES.slip.table} : ${JSON.stringify(succ)}`);
           sqlInsertSlips (connection, SQLTABLES.slipitem, formatted_out, succ).then(succ => {
-            console.log (`exportSlipsMain inserted ${SQLTABLES.slipitem.table} : ${succ.length}`);
+            console.log (`exportSlipsMain inserted ${SQLTABLES.slipitem.table} : ${JSON.stringify(succ)}`);
             redis.del(popped, () => {
               resolve (succ);
             });
@@ -353,7 +358,7 @@ function exportPromotionsMain (oauthres, connection) {
     });
   });
 }
-            
+
 
 console.log (`Connecting Redis ......`);
 redis.on('connect',  () => {
@@ -369,7 +374,7 @@ redis.on('connect',  () => {
     if(err) {
       return console.error('could not connect to SQL', err);
     } else {
-      console.log ('Connected Salesforce ......');  
+      console.log ('Connected Salesforce ......');
     	rest.post('https://login.salesforce.com/services/oauth2/token', {
     		query: {
     			grant_type:'password',
