@@ -32,7 +32,7 @@ var model = {
             "quantity": {"type": "Edm.Decimal"},
             "currentunitprice": {"type": "Edm.Double"},
             "extendedamount": {"type": "Edm.Double"},
-            "originalamount": {"type": "Edm.Double"},  //yyyy-MM-ddTHH:mm:ss.fffZ or yyyy-MM-ddTHH:mm:ss.fff[+&#124;-]HH:mm 2015-04-15T10:30:09.7550000Z
+            "originalamount": {"type": "Edm.Decimal"},  //yyyy-MM-ddTHH:mm:ss.fffZ or yyyy-MM-ddTHH:mm:ss.fff[+&#124;-]HH:mm 2015-04-15T10:30:09.7550000Z
 						"itemid": {"type": "Edm.String"},
 					  "sfdcitemid": {"type": "Edm.String"},
 					  "attributevalue": {"type": "Edm.String"},
