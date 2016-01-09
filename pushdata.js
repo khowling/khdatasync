@@ -188,7 +188,7 @@ function sqlInsertSlips(sql, syncdef, slips, headids, sidx, retrow) {
                 req_params.push ([`P${req_params.length+1}`, TYPES.DateTime, new Date(sval)]);
               else
                 req_params.push ([`P${req_params.length+1}`, TYPES.DateTime, null]);
-            else if (tf == "totalamount")
+            else if (tf == 'totalamount' || tf ==='quantity' || tf === 'currentunitprice' || tf === 'extendedamount' || tf === 'originalamount' || tf === 'dicountamount' || tf === 'discountableamount')
               req_params.push ([`P${req_params.length+1}`, TYPES.Float, sval]);
             else
               req_params.push ([`P${req_params.length+1}`, TYPES.VarChar, sval]);
@@ -295,7 +295,7 @@ function exportSlipsMain(connection) {
     async(exportSlips, rkey).then((redisprofiles) => {
       let popped = redisprofiles.popped, formatted_out =  redisprofiles.formatted_out;
       if (formatted_out.length >0) {
-        console.error ('exportSlipsMain got Slips : ' + formatted_out.length);
+        console.log ('exportSlipsMain got Slips : ' + formatted_out.length);
         sqlInsertSlips (connection, SQLTABLES.slip, formatted_out).then(succ => {
           console.log (`exportSlipsMain inserted ${SQLTABLES.slip.table} : ${JSON.stringify(succ)}`);
           sqlInsertSlips (connection, SQLTABLES.slipitem, formatted_out, succ).then(succ => {
@@ -304,13 +304,17 @@ function exportSlipsMain(connection) {
               resolve (succ);
             });
           }, rej => {
+            redis.sadd(rkey, popped); // put back popped
             reject ('sqlInsertSlipsItems rejection : ' + rej);
           }).catch (err => {
+            redis.sadd(rkey, popped); // put back popped
             reject ('sqlInsertSlipsItems error ' + err);
           });
         }, rej => {
+          redis.sadd(rkey, popped); // put back popped
           reject ('sqlInsertSlips rejection : ' + rej);
         }).catch (err => {
+          redis.sadd(rkey, popped); // put back popped
           reject ('sqlInsertSlips error ' + err);
         });
       } else

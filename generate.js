@@ -16,10 +16,11 @@ let importItems = function(q, oauth, nextRecordsUrl, retrow) {
 		}).on('complete', (sfrecs) => {
 //			console.log ('val : ' + JSON.stringify(val));
 			if (sfrecs.records && sfrecs.records.length >0) {
+				let conrows = retrow.concat(sfrecs.records);
         if (sfrecs.done)
-          resolve(retrow.concat(sfrecs.records));
+          resolve(conrows);
         else
-          importItems (q, oauth, sfrecs.nextRecordsUrl, sfrecs.records).then(resolve);
+          importItems (q, oauth, sfrecs.nextRecordsUrl, conrows).then(resolve);
       } else {
         console.error('sfrec', JSON.stringify(sfrecs));
         resolve ({});
@@ -36,75 +37,109 @@ let importItems = function(q, oauth, nextRecordsUrl, retrow) {
 
 
 var slip= {
-    "Transaction": {
-        "CompanyID": "Bench-Test",
-        "StoreID": "0420",
-        "EndDateTime": "2015-11-19T13:23:57",
-        "TotalAmount": 28506.20,
-        "Sale": [],
-				"Tender": [{
-						"TenderDescription": "Bar",
-						"Amount": 28516.20
-				}],
-				"Customer": {
-						"CustomerID": "4004555552797",
-						"AuthorizationMiscSettlementData": "GIROCARD"
-				},
-				"Discount": [{
-						"Amount": 5030.51,
-						"DiscountableAmount": 33536.71,
-						"DiscountName": "Weißwurstrabatt",
-						"PromotionID": "08154711"
-				}]
-		}
+	    "CompanyID": "",
+	    "StoreID": "0420",
+	    "EndDateTime": "2015-11-19T13:23:57",
+	    "TotalAmount": 0,
+	    "Sale": [],
+			"Tender": [{
+					"TenderDescription": "Bar",
+					"Amount": 0
+			}],
+			"Customer": {
+					"CustomerID": "",
+					"AuthorizationMiscSettlementData": ""
+			},
+			"Discount": [{
+					"Amount": 5030.51,
+					"DiscountableAmount": 33536.71,
+					"DiscountName": "Weißwurstrabatt",
+					"PromotionID": "08154711"
+			}]
 	};
 var slipSale = {
-			"CodeInput": "0003843789012",
-			"ItemID": "0003843",
-			"Quantity": 37,
-			"ExtendedAmount": 2932.40,
-			"OriginalAmount": 3449.88,
+			"CodeInput": "1234567890",
+			"ItemID": "",
+			"Quantity": 0,
+			"ExtendedAmount": 0,
+			"OriginalAmount": 0,
 			"ScanInput": "0003843789012",
-			"CurrentUnitPrice": 93.24,
-			"ItemDescription": "COLA CAO 1.2 KGS+10% GRATIS",
+			"CurrentUnitPrice": 0,
+			"ItemDescription": "",
 			"AttributeValue": "EUR",
 			"Discount": {
-					"Amount": 517.48,
-					"DiscountableAmount": 3449.88,
+					"Amount": 0,
+					"DiscountableAmount": 0,
 					"DiscountName": "Weißwurstrabatt",
 					"PromotionID": "08154711"
 			}
 	};
 
-var flow = {
+function random (array) {
+	return array[randomInt(0, array.length -1)];
+}
+function randomInt (low, high) {
+		let num = Math.floor(Math.random() * (high - low + 1)) + low;
+		//console.log ('ranInt : ' + num);
+		return num;
+}
+
+var oauth, testid, items, profiles, flow = {
 	before: [
 		{ post: `${process.env.AFFINITY_URL}/authenticate`,
 			body: `username=${process.env.SF_USERNAME}&password=${process.env.SF_PASSWORD}`,
-			headers: {'Content-Type': ' application/json'},
+			headers: {
+				'Content-Type': 'application/x-www-form-urlencoded',
+				'Accept': '*/*'
+			},
 			afterHooks: [(all) => {
-				console.log ('after hook : ' + JSON.stringify(all));
-				all.iterCtx = {auth: JSON.parse(all.body)};
+				oauth = JSON.parse(all.body);
 				return all;
 			}]
 		}
 	],
 	main: [
-		{ post: `${process.env.AFFINITY_URL}/slip/inject`,
-			beforeHooks: [(all) => {
-				all.requestOptions.json =  slip;
+		{ beforeHooks: [(all) => {
+				let s ={}, itteration = all.env.index; //(1-100?)
+				Object.assign (s, slip);
+				s.CompanyID = testid;
+				s.Customer.CustomerID = random(profiles).CustomerCardID__c;
+				s.Customer.AuthorizationMiscSettlementData = random(['BAR', 'CREDITCARD', 'GIROCARD','Cheque']);
+				s.EndDateTime = new Date().toISOString().substr(0,19);
+				s.TotalAmount = 0.0;
+				s.Sale = []
+				let nolines = randomInt(1, 12);
+
+				for (let i = 0; i < nolines; i++) {
+					let si = {};
+					Object.assign (si, slipSale);
+					si.ItemID = random(items).ItemNmb__c;
+					si.Quantity = randomInt(1, 5);
+					let price = randomInt (90, 999)/100;
+					si.ExtendedAmount = price;
+					si.OriginalAmount = price;
+					si.CurrentUnitPrice = price - (randomInt (9, 80)/100);
+					// totals
+					s.TotalAmount += (si.Quantity * si.CurrentUnitPrice);
+					s.Tender[0].Amount = s.TotalAmount;
+					s.Sale.push(si);
+				}
+				//console.log ('DEBUG : ' + JSON.stringify(s, null, 2));
+				all.requestOptions.json =  { 'Transaction': s};
 				all.requestOptions.headers = {
 					'Content-Type': 'application/json',
-					'x-key': all.iterCtx.auth.user.signature,
-					'x-access-token': all.iterCtx.auth.token
-				}
+					'x-key': oauth.user.signature,
+					'x-access-token': oauth.token
+				};
 				return all;
-			}]
+			}],
+			post: `${process.env.AFFINITY_URL}/slip/inject`
 		}
 	]
 };
 
-
-console.log ('Connected Salesforce ......');
+testid = `Bench${Date.now().toString().substr(6)}`;
+console.log ('BenchTest id :  ' + testid);
 rest.post('https://login.salesforce.com/services/oauth2/token', {
   query: {
     grant_type:'password',
@@ -113,20 +148,24 @@ rest.post('https://login.salesforce.com/services/oauth2/token', {
     username: process.env.SF_USERNAME,
     password: process.env.SF_PASSWORD
   }}).on('complete', function(oauthres) {
-	 console.log ('val : ' + JSON.stringify(oauthres));
-//   importItems('select Id, ItemNmb__c, Store__c, WGI__c, ItemFamily__c, SubItemGroup__c from Item__c', oauthres). then( succ => {
-//		 console.log ('importItems : ' + succ.length);
-//		 importItems('select Id, ItemNmb__c, Store__c, WGI__c, ItemFamily__c, SubItemGroup__c from Item__c', oauthres). then( succ => {
-//			 console.log ('importItems : ' + succ.length);
-			  benchrest(flow, {
- 			    limit: 1,     // concurrent connections
- 			    iterations: 1  // number of iterations to perform
- 					})
-			    .on('error', function (err, ctxName) { console.error('Failed in %s with err: ', ctxName, err); })
-			    .on('end', function (stats, errorCount) {
+  	importItems('select ItemNmb__c from Item__c', oauthres). then( succ => {
+			console.log ('Import Item__c : ' + succ.length);
+			items = succ;
+			importItems("select CustomerCardID__c from AffinityProfile__c where CustomerCardID__c NOT IN ('4004233290319','4004233216937','4004233213561','4004233243568','4004233226431','4004233222228','4004233274524','4004233289450')", oauthres). then( succ => {
+				profiles = succ;
+				console.log ('Import AffinityProfile__c : ' + succ.length);
+				let opts = {
+ 			    limit: 5,     // concurrent connections
+ 			    iterations: 500  // number of iterations to perform
+				};
+				console.log ('Starting Bench ' + JSON.stringify(opts));
+
+				benchrest(flow, opts).on('error', function (err, ctxName) {
+					console.error('Failed in %s with err: ', ctxName, err);
+				}).on('end', function (stats, errorCount) {
 			      console.log('error count: ', errorCount);
 			      console.log('stats', stats);
-			    });
-//		 });
-//   });
- });
+			  });
+			});
+		});
+	});
