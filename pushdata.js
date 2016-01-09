@@ -7,6 +7,7 @@ var Redis = require('ioredis'),
     Connection = require('tedious').Connection,
     Request = require('tedious').Request,
     TYPES = require('tedious').TYPES,
+    uuid = require('node-uuid'),
     rest = require('restler'),
     async = require('./lib/async.js'),
     zlib = require('zlib');
@@ -26,7 +27,7 @@ function* exportAffProfile(rkey, xref) {
     console.log ('exportAffProfile # : ' + custids.length);
     let csvlines = [];
     for (let p of custids) {
-      console.log ('exportAffProfile : getting ' + `profile:${p}:buckets`);
+//      console.log ('exportAffProfile : getting ' + `profile:${p}:buckets`);
       if (xref.hasOwnProperty(p)) {
         let resObj = yield redis.hgetall (`profile:${p}:buckets`), resArray = [];
         Object.keys(resObj).forEach(prop => resArray.push (prop,  (Number.parseInt (resObj[prop]) || "0")/1000));
@@ -149,16 +150,17 @@ function pgInsertSlips(pg, syncdef, slips, headids) {
 // ------------------------------------------- AZURE SQL
 var SQLTABLES = {
   'slip':
-    {schema: 'dbo',table: 'AzureSlip',  additional: "tsdbinsert",
+    {schema: 'dbo',table: 'AzureSlip',  head: true, additional: "tsdbinsert",
     fields:    ['companyid', 'customercardid','storeid','enddatetime','totalamount','tsreceived','tsqueueinsert','tsworkerreceived','tsstartcrunsh','tsendcrunsh'],
     sourceMap: ['Transaction.CompanyID','Transaction.Customer.CustomerID','Transaction.StoreID','Transaction.EndDateTime','Transaction.TotalAmount','tsreceived','tsqueueinsert','tsworkerreceived','tsstartcrunsh','tsendcrunsh']
   },
   'slipitem':
-    {schema: 'dbo',table: 'AzureSlipItem', itterator: 'Transaction.Sale', additional: "slip",
+    {schema: 'dbo',table: 'AzureSlipItem', head: false, itterator: 'Transaction.Sale', additional: "slip",
     fields:    ['codeinput', 'itemid', 'scaninput','quantity','currentunitprice','extendedamount','originalamount','attributevalue','sfdcitemid','dicountamount','discountableamount','discountname','promotionid'],
     sourceMap: ['CodeInput','ItemID','ScanInput','Quantity','CurrentUnitPrice','ExtendedAmount','OriginalAmount','AttributeValue','Item.sfid','Discount.DiscountAmount','Discount.DiscountableAmount','Discount.DiscountName','Discount.PromotionID']
   }
 };
+/*
 var MAX_SLIP_INSERT = 10; //(10 = 100 slip items = 2000 slipitem positional fields (SQL max 2100))
 function sqlInsertSlips(sql, syncdef, slips, headids, sidx, retrow) {
   return new Promise ((resolve, reject) => {
@@ -225,6 +227,93 @@ function sqlInsertSlips(sql, syncdef, slips, headids, sidx, retrow) {
       });
       sql.execSql(request);
 
+    } else
+      resolve([]);
+  });
+}
+*/
+function sqlInsertSlipsBulk(sql, syncdef, slips, headids) {
+  return new Promise ((resolve, reject) => {
+    let uuid_hidx = syncdef.head && new Map();
+
+    if (slips.length >0) {
+      var bulkLoad = sql.newBulkLoad(`${syncdef.schema}.${syncdef.table}`, function (error, rowCount) {
+        if (error) {
+
+          reject ('Error preparing bulkload : ' + error);
+        } else {
+          console.log('inserted %d rows', rowCount);
+          if (syncdef.head) {
+            let slipsidx_recid = new Map(),
+                inclause = "'" + Array.from(uuid_hidx.keys()).join("','") + "'",
+                squery = `SELECT uuid, id FROM ${syncdef.schema}.${syncdef.table} WHERE uuid IN (${inclause})`;
+          //  console.log (squery);
+            let qrequest = new Request(squery, function(err) {
+                  if (err) {
+                    console.log('select error : ' + err);
+                    reject(err);
+                  } else {
+                    resolve (slipsidx_recid);
+                  }
+                });
+
+            qrequest.on('row', function (columns) {
+              //console.log (`columns: ${JSON.stringify(columns)}`);
+              slipsidx_recid.set(uuid_hidx.get(columns[0].value), columns[1].value);
+              //console.log (`(${columns[0].value}) set ${uuid_hidx.get(columns[0].value)} :  ${columns[1].value}`);
+            });
+            sql.execSql(qrequest);
+          } else
+            resolve (rowCount);
+        }
+      });
+      // Add UniqueId or Forign Key Column Names
+      if (syncdef.head) {
+          bulkLoad.addColumn('uuid', TYPES.UniqueIdentifierN, { nullable: true });
+          bulkLoad.addColumn('tsdbinsert', TYPES.DateTime, { nullable: true });
+      } else {
+          bulkLoad.addColumn('slip', TYPES.Int, { nullable: true });
+      }
+      // Add rest of Column names
+      for (let tf of syncdef.fields) {
+        if (tf === "enddatetime" || tf === "tsreceived" || tf === "tsqueueinsert" || tf === "tsworkerreceived" || tf === "tsstartcrunsh" || tf === "tsendcrunsh")
+          bulkLoad.addColumn(tf, TYPES.DateTime, { nullable: true });
+          else if (tf == 'totalamount' || tf ==='quantity' || tf === 'currentunitprice' || tf === 'extendedamount' || tf === 'originalamount' || tf === 'dicountamount' || tf === 'discountableamount')
+          bulkLoad.addColumn(tf, TYPES.Float, { nullable: true });
+        else
+          bulkLoad.addColumn(tf, TYPES.VarChar, { nullable: true });
+      }
+
+      // Add Row Data
+      for (let hidx = 0; hidx < slips.length; hidx++) {
+        for (let r of syncdef.itterator ? resolvedot(syncdef.itterator, slips[hidx]) : [slips[hidx]]) {
+          let posrow = [];
+            // Add UniqueId or Forign Key Data
+          if (syncdef.head) {
+            let uid = uuid.v4().toUpperCase();
+            uuid_hidx.set(uid, hidx);
+            posrow.push (uid);
+            posrow.push (new Date());
+          } else
+            posrow.push (headids.get(hidx));
+
+          for (let i = 0; i < syncdef.fields.length; i++) {
+            let tf = syncdef.fields[i], sf = syncdef.sourceMap[i].split('.'),
+                sval = resolvedot(syncdef.sourceMap[i], r);
+
+            if (tf === "enddatetime" || tf === "tsreceived" || tf === "tsqueueinsert" || tf === "tsworkerreceived" || tf === "tsstartcrunsh" || tf === "tsendcrunsh")
+              if (sval)
+                posrow.push (new Date(sval));
+              else
+                posrow.push (null);
+            else
+              posrow.push (sval);
+          }
+        //  console.log ('adding row : ' + JSON.stringify(posrow));
+          bulkLoad.addRow(posrow);
+        }
+      }
+      sql.execBulkLoad(bulkLoad);
     } else
       resolve([]);
   });
@@ -296,33 +385,33 @@ function exportSlipsMain(connection) {
       let popped = redisprofiles.popped, formatted_out =  redisprofiles.formatted_out;
       if (formatted_out.length >0) {
         console.log ('exportSlipsMain got Slips : ' + formatted_out.length);
-        sqlInsertSlips (connection, SQLTABLES.slip, formatted_out).then(succ => {
-          console.log (`exportSlipsMain inserted ${SQLTABLES.slip.table} : ${JSON.stringify(succ)}`);
-          sqlInsertSlips (connection, SQLTABLES.slipitem, formatted_out, succ).then(succ => {
-            console.log (`exportSlipsMain inserted ${SQLTABLES.slipitem.table} : ${JSON.stringify(succ)}`);
+        sqlInsertSlipsBulk (connection, SQLTABLES.slip, formatted_out).then(headmap => {
+          console.log (`exportSlipsMain inserted ${SQLTABLES.slip.table} : ${headmap.size}`);
+          sqlInsertSlipsBulk (connection, SQLTABLES.slipitem, formatted_out, headmap).then(linescnt => {
+            console.log (`exportSlipsMain inserted ${SQLTABLES.slipitem.table} : ${linescnt}`);
             redis.del(popped, () => {
-              resolve (succ);
+              resolve ("Done");
             });
           }, rej => {
             redis.sadd(rkey, popped); // put back popped
-            reject ('sqlInsertSlipsItems rejection : ' + rej);
+            reject ('sqlInsertSlipsBulk rejection : ' + rej);
           }).catch (err => {
             redis.sadd(rkey, popped); // put back popped
-            reject ('sqlInsertSlipsItems error ' + err);
+            reject ('sqlInsertSlipsBulk error ' + err);
           });
         }, rej => {
           redis.sadd(rkey, popped); // put back popped
-          reject ('sqlInsertSlips rejection : ' + rej);
+          reject ('sqlInsertSlipsBulk rejection : ' + rej);
         }).catch (err => {
           redis.sadd(rkey, popped); // put back popped
-          reject ('sqlInsertSlips error ' + err);
+          reject ('sqlInsertSlipsBulk error ' + err);
         });
       } else
         return  resolve ('Nothing to do');
     }, rej => {
-      reject ('exportSlips rejection : ' + rej);
+      reject ('exportSlipsMain rejection : ' + rej);
     }).catch (err => {
-      reject ('exportSlips error ' + err);
+      reject ('exportSlipsMain error ' + err);
     });
   });
 }

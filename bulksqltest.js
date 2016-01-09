@@ -88,7 +88,7 @@ function sqlInsertSlipsBulk(sql, syncdef, slips, headids) {
             let slipsidx_recid = new Map(),
                 inclause = "'" + Array.from(uuid_hidx.keys()).join("','") + "'",
                 squery = `SELECT uuid, id FROM ${syncdef.schema}.${syncdef.table} WHERE uuid IN (${inclause})`;
-            console.log (squery);
+          //  console.log (squery);
             let qrequest = new Request(squery, function(err) {
                   if (err) {
                     console.log('select error : ' + err);
@@ -99,9 +99,9 @@ function sqlInsertSlipsBulk(sql, syncdef, slips, headids) {
                 });
 
             qrequest.on('row', function (columns) {
-              console.log (`columns: ${JSON.stringify(columns)}`);
+              //console.log (`columns: ${JSON.stringify(columns)}`);
               slipsidx_recid.set(uuid_hidx.get(columns[0].value), columns[1].value);
-              console.log (`(${columns[0].value}) set ${uuid_hidx.get(columns[0].value)} :  ${columns[1].value}`);
+              //console.log (`(${columns[0].value}) set ${uuid_hidx.get(columns[0].value)} :  ${columns[1].value}`);
             });
             sql.execSql(qrequest);
           } else
@@ -150,7 +150,7 @@ function sqlInsertSlipsBulk(sql, syncdef, slips, headids) {
             else
               posrow.push (sval);
           }
-          console.log ('adding row : ' + JSON.stringify(posrow));
+        //  console.log ('adding row : ' + JSON.stringify(posrow));
           bulkLoad.addRow(posrow);
         }
       }

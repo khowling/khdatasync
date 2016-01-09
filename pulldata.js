@@ -222,7 +222,10 @@ redis.on('connect', function () {
                 console.log ('importItems done '+ JSON.stringify(succ));
                 importAffRules(oauthres).then (succ => {
                   console.log ('importAffRules done '+ JSON.stringify(succ));
-                  redis.disconnect();
+                  redis.set('lastRuleUpdate', Date.now(), () => {
+                    redis.disconnect();
+                  })
+
   //                client.end();
                 }, rej => {
                   console.error ('importAffRules rejection : ' + rej);
