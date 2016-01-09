@@ -75,7 +75,7 @@ var SQLTABLES = {
 };
 function sqlInsertSlipsBulk(sql, syncdef, slips, headids) {
   return new Promise ((resolve, reject) => {
-    let retheaduuids = syncdef.head && [];
+    let uuid_hidx = syncdef.head && new Map();
 
     if (slips.length >0) {
       var bulkLoad = sql.newBulkLoad(`${syncdef.schema}.${syncdef.table}`, function (error, rowCount) {
@@ -84,7 +84,28 @@ function sqlInsertSlipsBulk(sql, syncdef, slips, headids) {
           reject ('Error preparing bulkload : ' + error);
         } else {
           console.log('inserted %d rows', rowCount);
-          resolve (retheaduuids || rowCount);
+          if (syncdef.head) {
+            let slipsidx_recid = new Map(),
+                inclause = "'" + Array.from(uuid_hidx.keys()).join("','") + "'",
+                squery = `SELECT uuid, id FROM ${syncdef.schema}.${syncdef.table} WHERE uuid IN (${inclause})`;
+            console.log (squery);
+            let qrequest = new Request(squery, function(err) {
+                  if (err) {
+                    console.log('select error : ' + err);
+                    reject(err);
+                  } else {
+                    resolve (slipsidx_recid);
+                  }
+                });
+
+            qrequest.on('row', function (columns) {
+              console.log (`columns: ${JSON.stringify(columns)}`);
+              slipsidx_recid.set(uuid_hidx.get(columns[0].value), columns[1].value);
+              console.log (`(${columns[0].value}) set ${uuid_hidx.get(columns[0].value)} :  ${columns[1].value}`);
+            });
+            sql.execSql(qrequest);
+          } else
+            resolve (rowCount);
         }
       });
       // Add UniqueId or Forign Key Column Names
@@ -92,7 +113,7 @@ function sqlInsertSlipsBulk(sql, syncdef, slips, headids) {
           bulkLoad.addColumn('uuid', TYPES.UniqueIdentifierN, { nullable: true });
           bulkLoad.addColumn('tsdbinsert', TYPES.DateTime, { nullable: true });
       } else {
-          bulkLoad.addColumn('slipuuid', TYPES.UniqueIdentifierN, { nullable: true });
+          bulkLoad.addColumn('slip', TYPES.Int, { nullable: true });
       }
       // Add rest of Column names
       for (let tf of syncdef.fields) {
@@ -110,12 +131,12 @@ function sqlInsertSlipsBulk(sql, syncdef, slips, headids) {
           let posrow = [];
             // Add UniqueId or Forign Key Data
           if (syncdef.head) {
-            let uid = uuid.v4();
-            retheaduuids.push(uid);
+            let uid = uuid.v4().toUpperCase();
+            uuid_hidx.set(uid, hidx);
             posrow.push (uid);
             posrow.push (new Date());
           } else
-            posrow.push (headids[hidx]);
+            posrow.push (headids.get(hidx));
 
           for (let i = 0; i < syncdef.fields.length; i++) {
             let tf = syncdef.fields[i], sf = syncdef.sourceMap[i].split('.'),
@@ -149,9 +170,9 @@ function exportSlipsMain(connection) {
     async(exportSlips, rkey).then((redisprofiles) => {
     let popped = redisprofiles.popped, formatted_out =  redisprofiles.formatted_out;
     if (formatted_out.length >0) {
-      sqlInsertSlipsBulk (connection, SQLTABLES.slip, formatted_out). then(headids => {
-        console.log (`sqlInsertSlipsBulk inserted headers :  ${JSON.stringify(headids)}`);
-        sqlInsertSlipsBulk (connection, SQLTABLES.slipitem, formatted_out, headids).then(linescnt => {
+      sqlInsertSlipsBulk (connection, SQLTABLES.slip, formatted_out). then(headmap => {
+        console.log (`sqlInsertSlipsBulk inserted headers :  ${headmap.size}`);
+        sqlInsertSlipsBulk (connection, SQLTABLES.slipitem, formatted_out, headmap).then(linescnt => {
           console.log (`sqlInsertSlipsBulk inserted lines :  ${linescnt}`);
           redis.del(popped, () => {
                 resolve ("Done");
