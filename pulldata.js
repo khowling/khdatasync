@@ -5,7 +5,8 @@ var Redis = require('ioredis'),
 //    pg = require('pg'),
 //    client = new pg.Client(process.env.PG_URL),
     rest = require('restler'),
-    async = require('./lib/async.js');
+    async = require('./lib/async.js'),
+    sfQueryAll = require('./lib/sfapi.js').sfQueryAll;
 
 
 
@@ -196,6 +197,48 @@ let importAffRules = function(oauth, nextRecordsUrl) {
 	}).catch ((e) => console.error ('catch ', e));
 }
 
+// ----------------- Coupon Assignments
+let importCoupons = function(oauth) {
+	return new Promise(function (resolve, reject)  {
+    sfQueryAll ('select Id, CustomerCardId__c, PromotionID__c, ValidFrom__c, ValidTo__c, Eingeloest_Am__c  from Coupon_Zuweisung__c', oauth).then((sfrecs) => {
+//			console.log ('val : ' + JSON.stringify(val));
+      if (sfrecs.length >0) {
+        async(updateRedisWithSFDCCoupons, sfrecs).then(() => {
+          console.log ('Coupons added');
+          resolve (sfrecs.length);
+        }, err => {
+          console.error('updateRedisWithSFDCCoupons reject', err);
+          reject(err);
+        }).catch(err => {
+          console.error('updateRedisWithSFDCCoupons error catch', err);
+          reject(err);
+        });
+      } else {
+				console.error('sfrec', JSON.stringify(sfrecs));
+				resolve (0);
+			}
+		}, (err) => {
+			console.error('sfQueryAll error', err);
+			reject('sfQueryAll err : ' + err);
+	  }).catch(err => {
+			console.error('sfQueryAll fail', err);
+			reject('sfQueryAll fail : ' + err);
+		});
+	}).catch ((e) => console.error ('catch ', e));
+}
+
+function* updateRedisWithSFDCCoupons (sfrecs) {
+  for (let c of sfrecs) {
+    yield redis.hmset (`coupon:${c.CustomerCardId__c}:${c.PromotionID__c}:data`,[
+      'ValidFrom__c', c.ValidFrom__c ? new Date(c.ValidFrom__c).getTime() : 0,
+      'ValidTo__c', c.ValidTo__c ? new Date(c.ValidTo__c).getTime() : 0,
+      'Eingeloest_Am__c', c.Eingeloest_Am__c ? new Date(c.Eingeloest_Am__c).getTime() : 0,
+      'Id', c.Id
+    ]);
+  }
+}
+
+// ----------------------------------------------------------------- MAIN
 
 console.log (`Connecting Redis ...... [${process.env.REDIS_URL}]`);
 redis.on('connect', function () {
@@ -216,43 +259,53 @@ redis.on('connect', function () {
 
             // Import to Redis
             console.log ('Starting import......');
-            importAffProfile(oauthres).then (succ => {
-              console.log ('importAffProfile done '+ JSON.stringify(succ));
-              importItems(oauthres).then (succ => {
-                console.log ('importItems done '+ JSON.stringify(succ));
-                importAffRules(oauthres).then (succ => {
-                  console.log ('importAffRules done '+ JSON.stringify(succ));
-                  redis.set('lastRuleUpdate', Date.now(), () => {
+            importCoupons(oauthres).then (succ => {
+              console.log ('importCoupons done '+ JSON.stringify(succ));
+              importAffProfile(oauthres).then (succ => {
+                console.log ('importAffProfile done '+ JSON.stringify(succ));
+                importItems(oauthres).then (succ => {
+                  console.log ('importItems done '+ JSON.stringify(succ));
+                  importAffRules(oauthres).then (succ => {
+                    console.log ('importAffRules done '+ JSON.stringify(succ));
+                    redis.set('lastRuleUpdate', Date.now(), () => {
+                      redis.disconnect();
+                    })
+    //                client.end();
+                  }, rej => {
+                    console.error ('importAffRules rejection : ' + rej);
                     redis.disconnect();
-                  })
+    //                client.end();
+                  }).catch (err => {
+                    console.error ('importAffRules error ' + err);
+                    redis.disconnect();
+    //                client.end();
+                  });
 
-  //                client.end();
                 }, rej => {
-                  console.error ('importAffRules rejection : ' + rej);
+                  console.error ('importItems rejection : ' + rej);
                   redis.disconnect();
-  //                client.end();
+    //              client.end();
                 }).catch (err => {
-                  console.error ('importAffRules error ' + err);
+                  console.error ('importItems error ' + err);
                   redis.disconnect();
-  //                client.end();
+    //              client.end();
                 });
 
               }, rej => {
-                console.error ('importItems rejection : ' + rej);
+                console.error ('importAffProfile rejection : ' + rej);
                 redis.disconnect();
-  //              client.end();
+    //            client.end();
               }).catch (err => {
-                console.error ('importItems error ' + err);
+                console.error ('importAffProfile error ' + err);
                 redis.disconnect();
   //              client.end();
               });
-
             }, rej => {
-              console.error ('importAffProfile rejection : ' + rej);
+              console.error ('importCoupons rejection : ' + rej);
               redis.disconnect();
   //            client.end();
             }).catch (err => {
-              console.error ('importAffProfile error ' + err);
+              console.error ('importCoupons error ' + err);
               redis.disconnect();
 //              client.end();
             });

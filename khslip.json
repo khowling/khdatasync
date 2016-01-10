@@ -226,7 +226,7 @@
                 "Amount": 461.86,
                 "DiscountableAmount": 3079.04,
                 "DiscountName": "Weißwurstrabatt",
-                "PromotionID": "08154711"
+                "PromotionID": "202219"
             }
         }, {
             "CodeInput": "0008458789012",
@@ -242,7 +242,7 @@
                 "Amount": 87.38,
                 "DiscountableAmount": 582.54,
                 "DiscountName": "Weißwurstrabatt",
-                "PromotionID": "08154711"
+                "PromotionID": "202219"
             }
         }],
         "Tender": [{
@@ -261,4 +261,3 @@
         }]
     }
 }
-

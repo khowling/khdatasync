@@ -453,6 +453,38 @@ function exportPromotionsMain (oauthres, connection) {
 }
 
 
+function exportCouponsMain (oauthres, connection) {
+  return new Promise ((resolve, reject) => {
+    let rkey = "redeems";
+
+
+    console.log (`exportCouponsMain : Look for ${rkey}`);
+    async(exportAffProfile, rkey, xref).then((redisprofiles) => {
+      let popped = redisprofiles.popped, formatted_out =  redisprofiles.formatted_out;
+      if (formatted_out.length >0) {
+        console.log ('Updating Affinity Profiles # ' +formatted_out.length);
+        let payloadCSV = "Id,Eingeloest_Am__c\n" + formatted_out.join('\n')
+    //                      console.log ('payloadCSV: ' + payloadCSV);
+        sfdcUpdateAffProfileBulk (oauthres, payloadCSV).then(succ => {
+          resolve (succ);
+        }, err => {
+          console.error ('sfdcUpdateAffProfileBulk error, put back popped : ', err);
+          redis.sadd(rkey, popped, () => reject (err));
+        });
+      } else {
+        resolve ('Nothing to do');
+      }
+    }, rej => {
+      reject ('exportAffProfile rejection : ' + rej);
+    }).catch (err => {
+      reject ('exportAffProfile error ' + err);
+    });
+    }
+
+  });
+}
+
+
 console.log (`Connecting Redis ......`);
 redis.on('connect',  () => {
   console.log ('Connected Azure SQL ......');
