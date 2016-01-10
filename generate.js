@@ -125,8 +125,8 @@ rest.post('https://login.salesforce.com/services/oauth2/token', {
 				profiles = succ;
 				console.log ('Import AffinityProfile__c : ' + succ.length);
 				let opts = {
- 			    limit: 5,     // concurrent connections
- 			    iterations: 500  // number of iterations to perform
+ 			    limit: 10,     // concurrent connections
+ 			    iterations: 50000  // number of iterations to perform
 				};
 				console.log ('Starting Bench ' + JSON.stringify(opts));
 

@@ -510,7 +510,7 @@ redis.on('connect',  () => {
       password: 'sForce123',
       server: 'affinitydb.database.windows.net',
       // When you connect to Azure SQL Database, you need these next options.
-      options: {encrypt: true, database: 'affinitydb'}
+      options: {encrypt: true, database: 'affinitydb', requestTimeout: 120000}
   });
   connection.on('connect', (err) => {
     if(err) {
