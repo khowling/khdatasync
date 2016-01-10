@@ -57,6 +57,27 @@ function* exportSlips(rkey) {
     }
     return { popped: custids, formatted_out: strlines};
 }
+// Coupons
+function* exportCoupons(rkey) {
+    let custids = [];
+    for (let i = 0; i < 10000; i++) {
+      let rpop = yield redis.spop(rkey); //s
+      if (rpop)
+        custids.push(rpop);
+      else
+        break;
+    }
+    console.log ('exportCoupons # : ' + custids.length);
+    let csvlines = [];
+    for (let p of custids) {
+      let resObj = yield redis.hgetall (p), resArray = [];
+      console.log (`exportCoupons ${p}: ${JSON.stringify(resObj)}`);
+      if (parseInt(resObj.Eingeloest_Am__c) > 0) {
+        csvlines.push(`${resObj.Id},${new Date(parseInt(resObj.Eingeloest_Am__c)).toISOString()}`);
+      }
+    }
+    return { popped: custids, formatted_out: csvlines};
+}
 
 function mkUnzipPromise(arg) {
   return new Promise ((resolve, reject) => {
@@ -319,7 +340,7 @@ function sqlInsertSlipsBulk(sql, syncdef, slips, headids) {
   });
 }
 // -------------------- BULK SFDC
-function sfdcUpdateAffProfileBulk(oauth, payloadCSV) {
+function sfdcUpdateAffProfileBulk(oauth, sobject, payloadCSV) {
   return new Promise ((resolve, reject) => {
     rest.post (oauth.instance_url + '/services/async/35.0/job', {
       headers: {
@@ -329,7 +350,7 @@ function sfdcUpdateAffProfileBulk(oauth, payloadCSV) {
       data: '<?xml version="1.0" encoding="UTF-8"?>' +
             '<jobInfo xmlns="http://www.force.com/2009/06/asyncapi/dataload">' +
             '    <operation>update</operation>' +
-            '    <object>AffinityProfile__c</object>' +
+            '    <object>'+ sobject +'</object>' +
             '    <contentType>CSV</contentType>' +
             '</jobInfo>'
     }).on('complete', (jobresponse) => {
@@ -381,8 +402,8 @@ function exportSlipsMain(connection) {
     let rkey = "slips";
     console.log (`exportSlipsMain : look for ${rkey}`);
 
-    async(exportSlips, rkey).then((redisprofiles) => {
-      let popped = redisprofiles.popped, formatted_out =  redisprofiles.formatted_out;
+    async(exportSlips, rkey).then((redisSlips) => {
+      let popped = redisSlips.popped, formatted_out =  redisSlips.formatted_out;
       if (formatted_out.length >0) {
         console.log ('exportSlipsMain got Slips : ' + formatted_out.length);
         sqlInsertSlipsBulk (connection, SQLTABLES.slip, formatted_out).then(headmap => {
@@ -433,7 +454,7 @@ function exportPromotionsMain (oauthres, connection) {
             console.log ('Updating Affinity Profiles # ' +formatted_out.length);
             let payloadCSV = "Id,Transfer__c\n" + formatted_out.join('\n')
 //                      console.log ('payloadCSV: ' + payloadCSV);
-            sfdcUpdateAffProfileBulk (oauthres, payloadCSV).then(succ => {
+            sfdcUpdateAffProfileBulk (oauthres, 'AffinityProfile__c', payloadCSV).then(succ => {
               resolve (succ);
             }, err => {
               console.error ('sfdcUpdateAffProfileBulk error, put back popped : ', err);
@@ -456,35 +477,31 @@ function exportPromotionsMain (oauthres, connection) {
 function exportCouponsMain (oauthres, connection) {
   return new Promise ((resolve, reject) => {
     let rkey = "redeems";
-
-
     console.log (`exportCouponsMain : Look for ${rkey}`);
-    async(exportAffProfile, rkey, xref).then((redisprofiles) => {
-      let popped = redisprofiles.popped, formatted_out =  redisprofiles.formatted_out;
+    async(exportCoupons, rkey).then((rediscoupons) => {
+      let popped = rediscoupons.popped, formatted_out =  rediscoupons.formatted_out;
       if (formatted_out.length >0) {
-        console.log ('Updating Affinity Profiles # ' +formatted_out.length);
+        console.log ('Updating Coupons  # ' +formatted_out.length);
         let payloadCSV = "Id,Eingeloest_Am__c\n" + formatted_out.join('\n')
     //                      console.log ('payloadCSV: ' + payloadCSV);
-        sfdcUpdateAffProfileBulk (oauthres, payloadCSV).then(succ => {
+        sfdcUpdateAffProfileBulk (oauthres, 'Coupon_Zuweisung__c', payloadCSV).then(succ => {
           resolve (succ);
         }, err => {
-          console.error ('sfdcUpdateAffProfileBulk error, put back popped : ', err);
+          console.error ('exportCouponsMain error, put back popped : ', err);
           redis.sadd(rkey, popped, () => reject (err));
         });
       } else {
         resolve ('Nothing to do');
       }
     }, rej => {
-      reject ('exportAffProfile rejection : ' + rej);
+      reject ('exportCoupons rejection : ' + rej);
     }).catch (err => {
-      reject ('exportAffProfile error ' + err);
+      reject ('exportCoupons error ' + err);
     });
-    }
-
   });
 }
 
-
+// -------------------- MAIN
 console.log (`Connecting Redis ......`);
 redis.on('connect',  () => {
   console.log ('Connected Azure SQL ......');
@@ -511,24 +528,36 @@ redis.on('connect',  () => {
 
       		if (oauthres.access_token && oauthres.instance_url) {
             exportSlipsMain(connection).then (succ => {
+              console.log (`exportSlipsMain success :  ${JSON.stringify(succ)}`);
               exportPromotionsMain(oauthres, connection).then (succ => {
                 console.log (`exportPromotionsMain success :  ${JSON.stringify(succ)}`);
-                redis.disconnect();
-                connection.close();
+                exportCouponsMain (oauthres, connection).then (succ => {
+                  console.log (`exportCouponsMain success :  ${JSON.stringify(succ)}`);
+                  redis.disconnect();
+                  connection.close();
+                }, err => {
+                  console.error (`exportCouponsMain failed :  ${JSON.stringify(err)}`);
+                  redis.disconnect();
+                  connection.close();
+                  process.exit(1);
+                });
               }, err => {
                 console.error (`exportPromotionsMain failed :  ${JSON.stringify(err)}`);
                 redis.disconnect();
                 connection.close();
+                process.exit(1);
               });
             }, err => {
               console.error (`exportSlipsMain failed :  ${JSON.stringify(err)}`);
               redis.disconnect();
               connection.close();
+              process.exit(1);
             });
           } else {
             console.error('no salesforce');
             redis.disconnect();
             connection.close();
+            process.exit(1);
           }
         });
     }
@@ -537,4 +566,5 @@ redis.on('connect',  () => {
 
 redis.on('error', function (e) {
   console.error ('Redis error',e);
+  process.exit(1);
 });
