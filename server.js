@@ -22,7 +22,15 @@ var model = {
 					  "tsworkerreceived": {"type": "Edm.DateTimeOffset"},
 					  "tsstartcrunsh": {"type": "Edm.DateTimeOffset"},
 					  "tsendcrunsh": {"type": "Edm.DateTimeOffset"},
-					  "tsdbinsert": {"type": "Edm.DateTimeOffset"}
+					  "tsdbinsert": {"type": "Edm.DateTimeOffset"},
+            "tsdbinsertfmt": {"type": "Edm.String"},
+            "tsendcrunshfmt": {"type": "Edm.String"},
+            "tsstartcrunshfmt": {"type": "Edm.String"},
+            "tsworkerreceivedfmt": {"type": "Edm.String"},
+            "tsqueueinsertfmt": {"type": "Edm.String"},
+            "tsreceivedfmt": {"type": "Edm.String"},
+            "enddatetimefmt": {"type": "Edm.String"},
+            "tsreceivedtoinsert": {"type": "Edm.String"}
 				},
         "SlipItemType": {
             "id": {"type": "Edm.String", key: true},
