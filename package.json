@@ -7,7 +7,6 @@
   "dependencies": {
     "bench-rest": "^1.1.1",
     "ioredis": "*",
-    "pg": "*",
     "restler": "*",
     "simple-odata-server": "*",
     "tedious": "^1.13.2",

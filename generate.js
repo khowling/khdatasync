@@ -113,8 +113,8 @@ console.log ('BenchTest id :  ' + testid);
 rest.post('https://login.salesforce.com/services/oauth2/token', {
   query: {
     grant_type:'password',
-    client_id:'3MVG9Rd3qC6oMalUd.EEm8FrmpaPkQs.Jb6CpcCMWu4CKLSmevbJsPy5EALngHRwoS13Zlv37VyvuHMVwScZD',
-    client_secret:'2727761931602693303',
+    client_id: process.env.SF_CLIENTID,
+    client_secret: process.env.SF_CLIENT_SECRET,
     username: process.env.SF_USERNAME,
     password: process.env.SF_PASSWORD
   }}).on('complete', function(oauthres) {

@@ -2,8 +2,6 @@
 
 var Redis = require('ioredis'),
     redis = new Redis(process.env.REDIS_URL),
-//    pg = require('pg'),
-//    client = new pg.Client(process.env.PG_URL),
     Connection = require('tedious').Connection,
     Request = require('tedious').Request,
     TYPES = require('tedious').TYPES,
@@ -27,8 +25,9 @@ function* exportAffProfile(rkey, xref) {
     console.log ('exportAffProfile # : ' + custids.length);
     let csvlines = [];
     for (let p of custids) {
-//      console.log ('exportAffProfile : getting ' + `profile:${p}:buckets`);
+/     console.log ('exportAffProfile : getting ' + `profile:${p}:buckets`);
       if (xref.hasOwnProperty(p)) {
+        console.log (`mapped cardid to sfdc id ${p} => ${xref[p]}`);
         let resObj = yield redis.hgetall (`profile:${p}:buckets`), resArray = [];
         Object.keys(resObj).forEach(prop => resArray.push (prop,  (Number.parseInt (resObj[prop]) || "0")/1000));
         csvlines.push(`${xref[p]},"${JSON.stringify(resArray).replace(/"/g, '\""')}"`);
@@ -50,9 +49,7 @@ function* exportSlips(rkey) {
     console.log ('exportSlips # : ' + custids.length);
     let strlines = [];
     for (let p of custids) {
-//      console.log (`exportSlips : getting ${p}`);
       let comp64 = yield redis.hget (p, "slip");
-//      console.log (`got :  ${comp64}`);
       strlines.push( JSON.parse(yield mkUnzipPromise(new Buffer(comp64, 'base64'))));
     }
     return { popped: custids, formatted_out: strlines};
@@ -92,19 +89,7 @@ function mkUnzipPromise(arg) {
   });
 }
 
-// -------------------- BULK Postgres
-var PGTABLES = {
-  'slip':
-    {schema: 'public', idsequence: 'slip_id_seq',table: 'slip',  additional: "tsdbinsert",
-    fields:    ['companyid','customercardid','storeid','enddatetime','totalamount','tsreceived','tsqueueinsert','tsworkerreceived','tsstartcrunsh','tsendcrunsh'],
-    sourceMap: ['Transaction.CompanyID','Transaction.Customer.CustomerID','Transaction.StoreID','Transaction.EndDateTime','Transaction.TotalAmount','tsreceived','tsqueueinsert','tsworkerreceived','tsstartcrunsh','tsendcrunsh']
-  },
-  'slipitem':
-    {schema: 'public', idsequence: 'slipitem_id_seq',table: 'slipitem', itterator: 'Transaction.Sale', additional: "slip",
-    fields:    ['codeinput', 'itemid', 'scaninput','quantity','currentunitprice','extendedamount','originalamount','attributevalue','sfdcitemid','dicountamount','discountableamount','discountname','promotionid'],
-    sourceMap: ['CodeInput','ItemID','ScanInput','Quantity','CurrentUnitPrice','ExtendedAmount','OriginalAmount','AttributeValue','Item.sfid','Discount.DiscountAmount','Discount.DiscountableAmount','Discount.DiscountName','Discount.PromotionID']
-  }
-};
+
 function resolvedot(strdot, val) {
   let sf = strdot.split('.'), ret = val[sf[0]];
   if (sf.length > 1)
@@ -120,54 +105,7 @@ function resolvedot(strdot, val) {
   return ret;
 }
 
-function pgInsertSlips(pg, syncdef, slips, headids) {
-  return new Promise ((resolve, reject) => {
 
-    if (slips.length >0) {
-      let insstr = `INSERT INTO ${syncdef.schema}.${syncdef.table} (id,${syncdef.additional},${syncdef.fields.join(',').toLowerCase()}) VALUES `,
-          valpos = [], valarray = [];
-      for (let hidx = 0; hidx < slips.length; hidx++) {
-        for (let r of syncdef.itterator ? resolvedot(syncdef.itterator, slips[hidx]) : [slips[hidx]]) {
-          let posrow = [];
-          // id from sequence
-          posrow.push (`nextval('${syncdef.schema}.${syncdef.idsequence}')`);
-          if (syncdef.additional) {
-            if (syncdef.additional === 'tsdbinsert')
-              valarray.push (new Date(Date.now()));
-            else if (syncdef.additional === 'slip')
-              valarray.push (headids[hidx].id);
-            posrow.push (`$${valarray.length}`);
-          }
-
-          for (let i = 0; i < syncdef.fields.length; i++) {
-            let tf = syncdef.fields[i], sf = syncdef.sourceMap[i].split('.'),
-                sval = resolvedot(syncdef.sourceMap[i], r);
-
-            if (tf === "enddatetime" || tf === "tsreceived" || tf === "tsqueueinsert" || tf === "tsworkerreceived" || tf === "tsstartcrunsh" || tf === "tsendcrunsh")
-              if (sval)
-                valarray.push (new Date(sval));
-              else
-                valarray.push (null);
-            else
-              valarray.push (sval);
-            posrow.push (`$${valarray.length}`);
-          }
-          valpos.push (`(${posrow.join(', ')})`);
-        }
-      }
-      insstr+= valpos.join(',');
-      insstr+= ' RETURNING id';
-      // insert into pg
-      pg.query({text: insstr, values: valarray}, function(err, result) {
-        if(err) {
-          console.error('error running query', err);
-          reject (err);
-        } else
-          return resolve(result);
-      });
-    }
-  });
-}
 // ------------------------------------------- AZURE SQL
 var SQLTABLES = {
   'slip':
@@ -181,78 +119,7 @@ var SQLTABLES = {
     sourceMap: ['CodeInput','ItemID','ScanInput','Quantity','CurrentUnitPrice','ExtendedAmount','OriginalAmount','AttributeValue','Item.sfid','Discount.DiscountAmount','Discount.DiscountableAmount','Discount.DiscountName','Discount.PromotionID']
   }
 };
-/*
-var MAX_SLIP_INSERT = 10; //(10 = 100 slip items = 2000 slipitem positional fields (SQL max 2100))
-function sqlInsertSlips(sql, syncdef, slips, headids, sidx, retrow) {
-  return new Promise ((resolve, reject) => {
-    if (!sidx) {
-      sidx = 0; retrow = [];
-    }
-    if (slips.length > sidx) {
-      let insstr = `INSERT INTO ${syncdef.schema}.${syncdef.table} (${syncdef.additional},${syncdef.fields.join(',').toLowerCase()}) OUTPUT INSERTED.id VALUES `,
-          req_params = [], posall = [];
-      for (let hidx = sidx; hidx < slips.length && hidx < (sidx + MAX_SLIP_INSERT); hidx++) {
-        for (let r of syncdef.itterator ? resolvedot(syncdef.itterator, slips[hidx]) : [slips[hidx]]) {
-          let posrow = [];
 
-          if (syncdef.additional === 'tsdbinsert')
-              posrow.push ('CURRENT_TIMESTAMP');
-          else if (syncdef.additional === 'slip') {
-              req_params.push([`P${req_params.length+1}`, TYPES.Int, headids[hidx].id]);
-              posrow.push (`@P${req_params.length}`);
-          }
-
-          for (let i = 0; i < syncdef.fields.length; i++) {
-            let tf = syncdef.fields[i], sf = syncdef.sourceMap[i].split('.'),
-                sval = resolvedot(syncdef.sourceMap[i], r);
-
-            if (tf === "enddatetime" || tf === "tsreceived" || tf === "tsqueueinsert" || tf === "tsworkerreceived" || tf === "tsstartcrunsh" || tf === "tsendcrunsh")
-              if (sval)
-                req_params.push ([`P${req_params.length+1}`, TYPES.DateTime, new Date(sval)]);
-              else
-                req_params.push ([`P${req_params.length+1}`, TYPES.DateTime, null]);
-            else if (tf == 'totalamount' || tf ==='quantity' || tf === 'currentunitprice' || tf === 'extendedamount' || tf === 'originalamount' || tf === 'dicountamount' || tf === 'discountableamount')
-              req_params.push ([`P${req_params.length+1}`, TYPES.Float, sval]);
-            else
-              req_params.push ([`P${req_params.length+1}`, TYPES.VarChar, sval]);
-            posrow.push (`@P${req_params.length}`);
-          }
-          posall.push (`(${posrow.join(', ')})`);
-        }
-      }
-      insstr+= posall.join(',') ;
-
-
-  //    console.log ('prepare ' + insstr);
-      let request = new Request(insstr,  function(err) {
-        if (err) {
-          console.error('prepare insert error', err);
-          reject ('prepare insert error' + err);
-        } else {
-          console.log('finished inserting ' + syncdef.table + ' : ' + retrow.length);
-          if (slips.length > (sidx + MAX_SLIP_INSERT))
-            sqlInsertSlips(sql, syncdef, slips, headids, (sidx + MAX_SLIP_INSERT), retrow).then(resolve);
-          else {
-            return resolve(retrow);
-          }
-        }
-      });
-
-      for (let p of req_params) {
-        request.addParameter(p[0], p[1], p[2]);
-      }
-
-      request.on('row', function (columns) {
-        retrow.push({id: columns[0].value});
-        //console.log ('row : ' + JSON.stringify(columns));
-      });
-      sql.execSql(request);
-
-    } else
-      resolve([]);
-  });
-}
-*/
 function sqlInsertSlipsBulk(sql, syncdef, slips, headids) {
   return new Promise ((resolve, reject) => {
     let uuid_hidx = syncdef.head && new Map();
@@ -447,6 +314,7 @@ function exportPromotionsMain (oauthres, connection) {
         redis.disconnect();
         connection.close();
       } else {
+        console.log (`got redis cardtoaffid ${xref.length}`);
         console.log (`exportPromotionsMain : Look for ${rkey}`);
         async(exportAffProfile, rkey, xref).then((redisprofiles) => {
           let popped = redisprofiles.popped, formatted_out =  redisprofiles.formatted_out;
@@ -506,11 +374,11 @@ console.log (`Connecting Redis ......`);
 redis.on('connect',  () => {
   console.log ('Connected Azure SQL ......');
   let connection = new Connection({
-      userName: 'khowling',
-      password: 'sForce123',
-      server: 'affinitydb.database.windows.net',
+      userName: process.env.SQL_USERNAME,
+      password: process.env.SQL_PASSWORD,
+      server: process.env.SQL_HOSTNAME,
       // When you connect to Azure SQL Database, you need these next options.
-      options: {encrypt: true, database: 'affinitydb', requestTimeout: 120000}
+      options: {encrypt: true, database: process.env.SQL_DBNAME, requestTimeout: 120000}
   });
   connection.on('connect', (err) => {
     if(err) {
@@ -520,8 +388,8 @@ redis.on('connect',  () => {
     	rest.post('https://login.salesforce.com/services/oauth2/token', {
     		query: {
     			grant_type:'password',
-    			client_id:'3MVG9Rd3qC6oMalUd.EEm8FrmpaPkQs.Jb6CpcCMWu4CKLSmevbJsPy5EALngHRwoS13Zlv37VyvuHMVwScZD',
-    			client_secret:'2727761931602693303',
+    			client_id: process.env.SF_CLIENTID,
+    			client_secret: process.env.SF_CLIENT_SECRET,
     			username: process.env.SF_USERNAME,
     			password: process.env.SF_PASSWORD
     		}}).on('complete', function(oauthres) {

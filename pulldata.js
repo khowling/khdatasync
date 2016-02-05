@@ -2,12 +2,9 @@
 
 var Redis = require('ioredis'),
     redis = new Redis(process.env.REDIS_URL),
-//    pg = require('pg'),
-//    client = new pg.Client(process.env.PG_URL),
     rest = require('restler'),
     async = require('./lib/async.js'),
     sfQueryAll = require('./lib/sfapi.js').sfQueryAll;
-
 
 
 // ------------------------------------------------------------- Salesforce -> Redis
@@ -242,85 +239,68 @@ function* updateRedisWithSFDCCoupons (sfrecs) {
 
 console.log (`Connecting Redis ...... [${process.env.REDIS_URL}]`);
 redis.on('connect', function () {
-//  client.connect((err) => {
-//    if(err) {
-//      return console.error('could not connect to postgres', err);
-//    } else {
-    	rest.post('https://login.salesforce.com/services/oauth2/token', {
-    		query: {
-    			grant_type:'password',
-    			client_id:'3MVG9Rd3qC6oMalUd.EEm8FrmpaPkQs.Jb6CpcCMWu4CKLSmevbJsPy5EALngHRwoS13Zlv37VyvuHMVwScZD',
-    			client_secret:'2727761931602693303',
-    			username: process.env.SF_USERNAME,
-    			password: process.env.SF_PASSWORD
-    		}}).on('complete', function(oauthres) {
+	rest.post('https://login.salesforce.com/services/oauth2/token', {
+		query: {
+			grant_type:'password',
+			client_id: process.env.SF_CLIENTID,
+			client_secret:  process.env.SF_CLIENT_SECRET,
+			username: process.env.SF_USERNAME,
+			password: process.env.SF_PASSWORD
+		}}).on('complete', function(oauthres) {
 
-      		if (oauthres.access_token && oauthres.instance_url) {
+  		if (oauthres.access_token && oauthres.instance_url) {
 
-            // Import to Redis
-            console.log ('Starting import......');
-            importCoupons(oauthres).then (succ => {
-              console.log ('importCoupons done '+ JSON.stringify(succ));
-              importAffProfile(oauthres).then (succ => {
-                console.log ('importAffProfile done '+ JSON.stringify(succ));
-                importItems(oauthres).then (succ => {
-                  console.log ('importItems done '+ JSON.stringify(succ));
-                  importAffRules(oauthres).then (succ => {
-                    console.log ('importAffRules done '+ JSON.stringify(succ));
-                    redis.set('lastRuleUpdate', Date.now(), () => {
-                      redis.disconnect();
-                    })
-    //                client.end();
-                  }, rej => {
-                    console.error ('importAffRules rejection : ' + rej);
-                    redis.disconnect();
-    //                client.end();
-                  }).catch (err => {
-                    console.error ('importAffRules error ' + err);
-                    redis.disconnect();
-    //                client.end();
-                  });
-
-                }, rej => {
-                  console.error ('importItems rejection : ' + rej);
+        // Import to Redis
+        console.log ('Starting import......');
+        importCoupons(oauthres).then (succ => {
+          console.log ('importCoupons done '+ JSON.stringify(succ));
+          importAffProfile(oauthres).then (succ => {
+            console.log ('importAffProfile done '+ JSON.stringify(succ));
+            importItems(oauthres).then (succ => {
+              console.log ('importItems done '+ JSON.stringify(succ));
+              importAffRules(oauthres).then (succ => {
+                console.log ('importAffRules done '+ JSON.stringify(succ));
+                redis.set('lastRuleUpdate', Date.now(), () => {
                   redis.disconnect();
-    //              client.end();
-                }).catch (err => {
-                  console.error ('importItems error ' + err);
-                  redis.disconnect();
-    //              client.end();
-                });
-
+                })
               }, rej => {
-                console.error ('importAffProfile rejection : ' + rej);
+                console.error ('importAffRules rejection : ' + rej);
                 redis.disconnect();
-    //            client.end();
               }).catch (err => {
-                console.error ('importAffProfile error ' + err);
+                console.error ('importAffRules error ' + err);
                 redis.disconnect();
-  //              client.end();
               });
+
             }, rej => {
-              console.error ('importCoupons rejection : ' + rej);
+              console.error ('importItems rejection : ' + rej);
               redis.disconnect();
-  //            client.end();
             }).catch (err => {
-              console.error ('importCoupons error ' + err);
+              console.error ('importItems error ' + err);
               redis.disconnect();
-//              client.end();
             });
 
-          } else {
-            console.error('no salesforce');
+          }, rej => {
+            console.error ('importAffProfile rejection : ' + rej);
             redis.disconnect();
-//            client.end();
-          }
+          }).catch (err => {
+            console.error ('importAffProfile error ' + err);
+            redis.disconnect();
+          });
+        }, rej => {
+          console.error ('importCoupons rejection : ' + rej);
+          redis.disconnect();
+        }).catch (err => {
+          console.error ('importCoupons error ' + err);
+          redis.disconnect();
         });
-//    }
-//  });
+
+      } else {
+        console.error('no salesforce');
+        redis.disconnect();
+      }
+    });
 });
 
 redis.on('error', function (e) {
   console.error ('Redis error',e);
-//  client.end();
 });

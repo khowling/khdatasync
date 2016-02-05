@@ -2,7 +2,6 @@
 
 var http = require('http'),
     ODataServer = require("simple-odata-server"),
-    //pg = require('pg');
     Connection = require('tedious').Connection,
     Request = require('tedious').Request,
     TYPES = require('tedious').TYPES;
@@ -60,20 +59,14 @@ var model = {
     }
 };
 
-//pg.defaults.poolSize = 5;
-//pg.defaults.poolIdleTimeout = 3000; // 5 seconds (try to overcome the azure loadbalancer)
-//pg.connect(process.env.PG_URL, function(err, client, done) {
-//  if(err) {
-//    return console.error('could not connect to postgres', err);
-//  } else {
 
 console.log ('Connected Azure SQL ......');
 let connection = new Connection({
-    userName: 'khowling',
-    password: 'sForce123',
-    server: 'affinitydb.database.windows.net',
+    userName: process.env.SQL_USERNAME,
+    password: process.env.SQL_PASSWORD,
+    server: process.env.SQL_HOSTNAME,
     // When you connect to Azure SQL Database, you need these next options.
-    options: {encrypt: true, database: 'affinitydb'}
+    options: {encrypt: true, database: process.env.SQL_DBNAME}
 });
 connection.on('err', (err) => {
   console.error('connect to SQL err', err);
@@ -87,14 +80,7 @@ connection.on('connect', (err) => {
     var odataServer = ODataServer(process.env.ODATA_HOSTNAME)
       .model(model)
       .query((setName, query, cb) => {
-//		let client = new pg.Client(process.env.PG_URL);
-//		console.log ('Connecting to (need to do it here because Azure cannot keep open a connection) : ' + process.env.PG_URL);
 
-//		client.connect(function(err) {
-//		  if(err) {
-//		    console.error('could not connect to postgres', err);
-//				cb(err);
-//		  } else {
 				let qstr = ` ${Object.keys(query['$select']).join(',')} FROM  ${query['collection']}`;
 				if (query['$filter'] && Object.keys(query['$filter']).length >0) {
 
@@ -160,23 +146,6 @@ connection.on('connect', (err) => {
         });
         connection.execSql(request);
       });
-/*
-				client.query(qstr, function(err, result) {
-					client.end();
-					if (err) {
-						console.log ("query err " + JSON.stringify(err));
-						cb(err);
-					} else {
-						console.log ("query succ " + JSON.stringify(result.rows));
-						cb(null, {
-								count: result.rows.length,
-								value: result.rows
-						});
-					}
-				});
-*/
       http.createServer(odataServer.handle.bind(odataServer)).listen(process.env.PORT ||1337);
     }
 });
-//	}
-//});
